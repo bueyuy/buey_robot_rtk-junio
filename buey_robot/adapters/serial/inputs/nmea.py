@@ -1,6 +1,6 @@
 """Adquisicion de datos GPS via NMEA por puerto serial.
 
-Sin logica ROS2. Abre el puerto, lee lineas NMEA (GGA y RMC), parsea
+Sin logica ROS2. Abre el puerto, lee lineas NMEA (GGA, RMC y VTG), parsea
 coordenadas y llama a on_fix con un dict estandarizado.
 
 El loop de lectura corre en un thread separado para no bloquear el
@@ -35,8 +35,8 @@ class SerialNmeaInput:
           quality      (int, 0=no fix, 1=GPS, 2=DGPS, 4=RTK Fixed, 5=RTK Float)
           satellites   (int)
           hdop         (float)
-          speed_knots  (float o None, velocidad sobre suelo en nudos, de RMC)
-          cog          (float o None, curso sobre suelo en grados 0-360, de RMC)
+          speed_knots  (float o None, velocidad sobre suelo en nudos, de RMC o VTG)
+          cog          (float o None, curso sobre suelo en grados 0-360, de RMC o VTG)
     timeout : float
         Timeout de lectura serial en segundos.
     reconnect_interval : float
@@ -152,10 +152,10 @@ class SerialNmeaInput:
         if len(parts) < 3:
             return
         sentence_type = parts[0]
-        if sentence_type in ('$GPGGA', '$GNGGA'):
+        if sentence_type in ('$GNGGA'):
             self._process_gga(parts)
-        elif sentence_type in ('$GPRMC', '$GNRMC'):
-            self._process_rmc(parts)
+        elif sentence_type in ('$GPVTG', '$GNVTG'):
+            self._process_vtg(parts)
 
     def _process_gga(self, parts: list):
         """Sentencia GGA: posicion, calidad, satelites, altitud."""
@@ -178,34 +178,32 @@ class SerialNmeaInput:
                     self._lon = lon
             if parts[9]:
                 self._alt = float(parts[9])
-            self._emit_fix()
         except (ValueError, IndexError):
             pass
 
-    def _process_rmc(self, parts: list):
-        """Sentencia RMC: posicion, velocidad (SOG) y curso (COG).
 
-        Campos RMC:
-          parts[7] = velocidad sobre suelo en nudos (SOG)
-          parts[8] = curso sobre suelo en grados (COG, 0-360 desde Norte)
+    def _process_vtg(self, parts: list):
+        """Sentencia VTG: curso (COG) y velocidad (SOG).
+
+        Este receptor no emite RMC; el COG/SOG llegan por VTG. Actualiza el
+        estado y emite el fix (igual que RMC) para que el COG/SOG salga
+        sincronizado con esta misma VTG. Con GGA + VTG la publicacion queda
+        en ~2 Hz.
+
+        Campos VTG:
+          parts[1] = curso sobre suelo verdadero en grados (COG, 0-360 desde Norte)
+          parts[5] = velocidad sobre suelo en nudos (SOG)
+
+        Cuando el robot esta quieto el receptor deja COG vacio (no calcula
+        curso a velocidad ~0); en ese caso se conserva el ultimo valor.
         """
-        if len(parts) < 9:
+        if len(parts) < 6:
             return
         try:
-            if parts[2] != 'A':
-                return
-            if parts[3] and parts[4]:
-                lat = self._parse_coordinate(parts[3], parts[4])
-                if lat is not None:
-                    self._lat = lat
-            if parts[5] and parts[6]:
-                lon = self._parse_coordinate(parts[5], parts[6])
-                if lon is not None:
-                    self._lon = lon
-            if parts[7]:
-                self._speed_knots = float(parts[7])
-            if parts[8]:
-                self._cog = float(parts[8])
+            if parts[1]:
+                self._cog = float(parts[1])
+            if parts[5]:
+                self._speed_knots = float(parts[5])
             if self._quality > 0:
                 self._emit_fix()
         except (ValueError, IndexError):
