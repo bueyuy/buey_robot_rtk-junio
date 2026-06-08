@@ -1,0 +1,16 @@
+robot:
+  # Geometria fisica del robot
+  dimensions:
+    wheelbase: 0.8              # metros, distancia entre ejes
+
+  # Frames TF
+  frames:
+    map_frame: "map"
+    base_frame: "base_link"
+    gps_frame: "gps_link"
+    imu_frame: "imu_link"
+
+  # Safety
+  safety:
+    watchdog_timeout_s: 0.5     # segundos sin cmd_vel -> auto-stop
+    emergency_stop_decel: 2.0   # desaceleracion de emergencia (m/s^2)

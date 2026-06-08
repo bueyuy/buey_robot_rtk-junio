@@ -1,0 +1,22 @@
+# Rectangulo 5m x 2.5m en coordenadas locales
+# Coordenadas en metros relativas al frame odom de la ZED
+waypoints:
+  # P0 - Inicio
+  - x: 0.0
+    y: 0.0
+
+  # P1 - 5m adelante
+  - x: 5.0
+    y: 0.0
+
+  # P2 - 5m adelante + 2.5m lateral
+  - x: 5.0
+    y: 2.5
+
+  # P3 - 2.5m lateral (volver)
+  - x: 0.0
+    y: 2.5
+
+  # P4 - Vuelta al inicio (1m antes para no completar 100%)
+  - x: 0.0
+    y: 1.0

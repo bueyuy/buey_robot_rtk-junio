@@ -1,0 +1,50 @@
+# Override del navigation.yaml para modo outdoor (RTK).
+# Solo poner aca los parametros que difieren del default.
+# ROS2 mergea los YAMLs en orden: navigation.yaml primero, este despues.
+
+/**:
+  ros__parameters:
+    # Navegacion punto a punto BASE->START usando los puntos del dashboard.
+    # Para volver a waypoints YAML: comentar este bloque (default waypoints_file).
+    goal_source: "mqtt_positions"
+
+    # --- Tuning anti-zigzag (test linea recta, 2026-05-29) ---
+    # Con heading derivado SOLO de GPS (IMU fake = heading fijo, inutil), a baja
+    # velocidad el ruido RTK (~1-2cm) domina el delta de posicion y el heading
+    # enloquece. Esto disparaba el stop-turn-stutter de FINAL_APPROACH (42s, 9
+    # re-alineaciones para los ultimos 1.3m). Mitigacion:
+    controller:
+      goal:
+        # Aflojar alineacion: el re-trigger de FINAL_APPROACH es 2x este valor,
+        # antes 10deg->re-align a 20deg (constantemente violado por ruido heading).
+        alignment_tolerance_deg: 25.0
+      velocity:
+        # No arrastrarse tan lento al final: mantiene el heading GPS con señal real.
+        min_linear_m_s: 0.20
+      angular:
+        # Suavizar la correccion proporcional ante heading ruidoso.
+        proportional_gain: 0.5
+
+    gps:
+      origin:
+        use_mqtt_base: true   # el origen ENU = BASE (debe ir junto a goal_source)
+      heading:
+        # Congelar el ultimo heading bueno por debajo de esta velocidad en vez de
+        # recalcular desde ruido. Lo lee rtk.py (odometry) -> requiere reiniciar
+        # outdoor_rtk.launch.py, no solo el controller.
+        min_movement_threshold: 0.25
+
+# Ejemplos tipicos a ajustar (descomentar y ajustar valores):
+#
+# /**:
+#   ros__parameters:
+#     controller:
+#       velocity:
+#         cruise_linear_m_s: 0.5
+#         max_angular_rad_s: 0.8
+#       goal:
+#         position_tolerance_m: 0.8  # mas tolerante en exterior
+#     gps:
+#       quality:
+#         min_satellites: 10
+#         require_rtk_fix: true

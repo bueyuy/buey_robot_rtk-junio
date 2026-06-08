@@ -1,0 +1,19 @@
+imu_compass:
+  ros__parameters:
+    # Topic de entrada (campo magnetico crudo del firmware micro-ROS) y de salida
+    mag_topic: "/imu/mag"
+    heading_topic: "/imu/heading_calibrated"
+
+    # Filtrado
+    glitch_threshold: 1500.0   # descartar lecturas mag con |componente| mayor (glitch I2C ~+-4096)
+    filter_alpha: 0.3          # suavizado por media circular (1.0 = sin suavizado)
+    invert: true               # brujula calibrada gira al reves del rumbo real (confirmado 2026-06-04 en prueba en L)
+
+    # --- CALIBRACION hard/soft-iron (de imu_cal/fit_ellipse.py) ---
+    # Obtenida 2026-06-04. NOTA: una recaptura "mas limpia" (3608 pts, residual
+    # 0.49, centro -78.3/275.8) dio PEOR resultado en campo (delta +13/+35 vs
+    # -8/+7) -> se revirtio a estos valores. El residual no predice bien la
+    # precision real: domina el tilt durante el giro (accel del firmware roto =>
+    # sin tilt-compensation). Floor practico ~+-10-15 grados.
+    hard_iron: [-51.55, 327.29]            # offset [x, y]
+    soft_iron: [1.0080, 0.0703, 0.0703, 1.6180]   # 2x2 fila-mayor [[a,b],[c,d]]

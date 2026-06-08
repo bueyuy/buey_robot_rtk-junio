@@ -1,0 +1,47 @@
+/**:
+  ros__parameters:
+    gps:
+      serial:
+        port: "/dev/ttyACM0"        # puerto serial del GPS RTK
+        baudrate: 9600
+        timeout: 1.0
+      # Driver: minimo de satelites para publicar /gps/fix
+      min_satellites: 4
+      # Driver: true exige RTK (quality >= 4); false acepta cualquier fix
+      require_rtk_fix: true
+      frame_id: "gps_link"
+
+      # Odometry RTK: auto-establece primer fix como origen
+      origin:
+        auto_set: true
+        # Si true, el origen ENU lo fija la BASE de MQTT (bueyuy/positions/base) en vez
+        # del primer fix; rtk.py espera la BASE antes de producir /odom_filtered.
+        # navigation_outdoor.yaml lo activa para navegar BASE->START.
+        use_mqtt_base: false
+
+      # Odometry RTK: calidad minima para navegar
+      quality:
+        min_satellites: 4
+        require_rtk_fix: false
+
+      # Odometry RTK: filtro de posicion GPS
+      filter:
+        enabled: true
+        window_size: 5
+
+    imu:
+      topics:
+        # Topics MQTT que publica la IMU (Pico W u otro microcontrolador)
+        accel_x: "imu/accel/x"
+        accel_y: "imu/accel/y"
+        accel_z: "imu/accel/z"
+        mag_x: "imu/mag/x"
+        mag_y: "imu/mag/y"
+        mag_z: "imu/mag/z"
+        heading: "imu/heading"
+        json: "imu/data/json"
+
+    # Filtro de odometria ZED (leido por odometry/zed.py)
+    filter:
+      enabled: true
+      window_size: 5

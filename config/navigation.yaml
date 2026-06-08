@@ -1,0 +1,71 @@
+/**:
+  ros__parameters:
+    # Default vacio — el launch lo sobreescribe con LaunchConfiguration('waypoints_file').
+    # Sirve como fallback si alguien levanta el controller con `ros2 run` directo.
+    auto_load_waypoints: ""
+
+    # Fuente de la meta: "waypoints_file" (YAML) o "mqtt_positions" (navega BASE->START
+    # usando los puntos del dashboard). navigation_outdoor.yaml lo sobreescribe.
+    goal_source: "waypoints_file"
+
+    controller:
+      frequency_hz: 10.0
+      mode: "no-arc"
+      goal:
+        position_tolerance_m: 0.50
+        alignment_tolerance_deg: 10.0
+      velocity:
+        cruise_linear_m_s: 0.3
+        min_linear_m_s: 0.15
+        cruise_angular_rad_s: 0.4
+        max_angular_rad_s: 0.6
+      angular:
+        proportional_gain: 0.8
+      deceleration:
+        distance_m: 2.0
+      ramp:
+        accel_rate_linear: 0.015
+        decel_rate_linear: 0.03
+        accel_rate_angular: 0.03
+        decel_rate_angular: 0.03
+      arc:
+        linear_m_s: 0.233
+        angular_rad_s: 0.302
+        start_distance_m: 1.3
+
+    odometry:
+      topic: "/zed/zed_node/odom"   # topic ZED; en outdoor_rtk se ignora (rtk.py suscribe /gps/fix)
+
+    camera:
+      offset_x_m: 0.875             # compensacion camara ZED al centro del robot
+
+    # Parametros de heading y fusion IMU para odometry/rtk.py
+    gps:
+      heading:
+        min_movement_threshold: 0.1 # movimiento minimo para calcular heading GPS (m)
+        filter_alpha: 0.15          # suavizado exponencial del heading GPS (bajado de 0.3: amortigua el transitorio basura del curso GPS al arrancar, que con fusion GPS-heavy mandaba un giro equivocado)
+      imu:
+        use_imu_heading: true      # usar fusion GPS+IMU en odometry/rtk.py
+        fusion_alpha: 0.2           # peso del IMU en fusion. Probado en campo 2026-06-04: con 0.9 (IMU) el robot se fue 60deg del rumbo real (motores corrompen el magnetometro al girar); el curso GPS sigue el movimiento real -> confiar en GPS a crucero.
+        fusion_min_speed: 0.3       # velocidad minima para activar fusion (m/s)
+        # Topic del heading de brujula que consume rtk.py. Por defecto el
+        # calibrado (nodo imu_compass). Para volver al crudo del firmware: /imu/heading
+        heading_topic: "/imu/heading_calibrated"
+        # Declinacion magnetica para convertir brujula -> Norte geografico.
+        # Uruguay ~ -8.5 grados, pero este valor ABSORBE ademas el offset de
+        # montaje + convencion de la brujula calibrada (imu_compass, invert=true).
+        # Calibrado empiricamente 2026-06-04 con invert=true: ~ -90.5 (provisional,
+        # afinar comparando /heading/imu vs /heading/gps en recta hasta delta~0).
+        magnetic_declination_deg: -90.5
+
+    joystick:
+      cruise_linear_m_s: 0.3
+      cruise_angular_rad_s: 0.5
+      max_angular_rad_s: 0.6
+      frequency_hz: 10.0
+      timeout_ms: 600.0
+      ramp:
+        accel_rate_linear: 0.03
+        decel_rate_linear: 0.03
+        accel_rate_angular: 0.03
+        decel_rate_angular: 0.03

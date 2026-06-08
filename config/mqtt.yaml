@@ -1,0 +1,40 @@
+broker:
+  host: "192.168.90.24"
+  port: 1883
+  keepalive: 60
+  credentials:
+    username: ""
+    password: ""
+
+qos:
+  telemetry: 0
+
+reconnect:
+  interval_sec: 5.0
+
+topics:
+  # Motor y control de velocidad
+  motors: "bueyuy/navigation/motors"
+  cmd_vel_debug: "bueyuy/navigation/cmd_vel"
+  joystick: "bueyuy/navigation/joystick"
+
+  # Estado de navegacion
+  trajectory_status: "bueyuy/navigation/status"
+
+  # Telemetria consolidada
+  telemetry_json: "bueyuy/telemetry/json"
+
+  # Waypoints (retained)
+  waypoints: "bueyuy/waypoints"
+  waypoints_xy: "bueyuy/waypoints_xy"
+
+  # Configuracion del robot (retained)
+  config: "bueyuy/config"
+  config_motors: "bueyuy/config/motors"
+
+  # GPS RTK (solo en outdoor_rtk)
+  gps_json: "rtk/location/json"
+
+  # Puntos de referencia (retained, los publica el dashboard)
+  positions_base: "bueyuy/positions/base"
+  positions_start: "bueyuy/positions/start"
