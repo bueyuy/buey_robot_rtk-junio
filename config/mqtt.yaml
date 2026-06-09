@@ -18,6 +18,8 @@ topics:
   cmd_vel_debug: "bueyuy/navigation/cmd_vel"
   joystick: "bueyuy/navigation/joystick"
 
+  imu_calibration: "bueyuy/sensors/imu/calibration"
+
   # Estado de navegacion
   trajectory_status: "bueyuy/navigation/status"
 
@@ -31,6 +33,8 @@ topics:
   # Configuracion del robot (retained)
   config: "bueyuy/config"
   config_motors: "bueyuy/config/motors"
+
+
 
   # GPS RTK (solo en outdoor_rtk)
   gps_json: "rtk/location/json"
