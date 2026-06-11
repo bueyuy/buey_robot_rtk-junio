@@ -15,6 +15,6 @@ imu_compass:
     # -8/+7) -> se revirtio a estos valores. El residual no predice bien la
     # precision real: domina el tilt durante el giro (accel del firmware roto =>
     # sin tilt-compensation). Floor practico ~+-10-15 grados.
-    # Recapturado en vivo (imu_cal_live) 2026-06-09. n=219, residual=0.15, cobertura_cal=100%.
-    hard_iron: [-161.66, 305.61]            # offset [x, y]
-    soft_iron: [1.0028, 0.0238, 0.0238, 1.2011]   # 2x2 fila-mayor [[a,b],[c,d]]
+    # Recapturado en vivo (imu_cal_live) 2026-06-11. n=154, residual=0.32, cobertura_cal=83%.
+    hard_iron: [-88.96, 351.13]            # offset [x, y]
+    soft_iron: [1.0076, -0.0817, -0.0817, 1.8771]   # 2x2 fila-mayor [[a,b],[c,d]]

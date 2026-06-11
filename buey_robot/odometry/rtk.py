@@ -10,7 +10,7 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 from gps_msgs.msg import GPSFix
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Float64, Float32
+from std_msgs.msg import Float32
 import math
 
 from buey_robot.adapters.mqtt.client import get_client
@@ -74,8 +74,8 @@ class RTKOdometry(Node):
 
         # Publishers: misma interfaz que odometry/zed.py
         self.odom_filtered_pub = self.create_publisher(Odometry, '/odom_filtered', 10)
-        self.heading_pub = self.create_publisher(Float64, '/heading/gps', 10)
-        self.heading_imu_pub = self.create_publisher(Float64, '/heading/imu', 10)
+        #self.heading_pub = self.create_publisher(Float64, '/heading/gps', 10)
+        #self.heading_imu_pub = self.create_publisher(Float64, '/heading/imu', 10)
 
         # Subscribers
         self.create_subscription(GPSFix, '/gps/fix', self.gps_callback, 10)
@@ -187,13 +187,10 @@ class RTKOdometry(Node):
             math.radians(90.0 - msg.data - self.magnetic_declination)
         )
 
-        # Siempre reenviar heading IMU para pose.py (en grados ENU, comparable
-        # directamente con /heading/gps para tunear la declinacion).
-        heading_msg = Float64()
-        heading_msg.data = math.degrees(yaw_enu)
-        self.heading_imu_pub.publish(heading_msg)
-
-        # Solo fusionar en la odometria si use_imu_heading; si no, heading solo-GPS
+        # rtk SOLO produce /odom_filtered. El heading IMU para telemetria (crudo y
+        # calibrado) lo publica imu_bridge directo a MQTT (bueyuy/imu/heading y
+        # bueyuy/imu/heading_calibrated). Aca el heading se usa unicamente para la
+        # fusion interna con el GPS cuando use_imu_heading.
         if self.use_imu_heading:
             self.imu_heading = yaw_enu
             self.imu_heading_received = True
@@ -210,11 +207,8 @@ class RTKOdometry(Node):
         if self.current_speed > self.min_movement:
             # COG brujula -> yaw ENU: yaw = 90 - track
             raw_gps_heading = angle_normalize(math.radians(90.0 - track))
-            self.gps_heading = self.heading_filter.update(raw_gps_heading)
-
-            heading_msg = Float64()
-            heading_msg.data = math.degrees(self.gps_heading)
-            self.heading_pub.publish(heading_msg)
+            self.gps_heading = raw_gps_heading  # self.heading_filter.update(...)
+            # No se publica /heading/gps: rtk solo emite /odom_filtered.
 
         self._fuse_heading()
 

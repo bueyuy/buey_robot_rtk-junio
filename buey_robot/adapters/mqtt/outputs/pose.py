@@ -7,25 +7,28 @@ Publica por evento: cada vez que llega un mensaje en cualquiera de los
 topics suscritos se republica el estado consolidado al broker MQTT.
 
 Suscribe:
-  - /odom_filtered (Odometry)
-  - /heading/zed   (Float64, grados)
-  - /heading/imu   (Float64, grados)
-  - /heading/gps   (Float64, grados) -- solo en outdoor_rtk
+  - /odom_filtered (Odometry) -- posicion y heading (yaw del quaternion)
+
+El heading sale del quaternion de /odom_filtered, que ya viene fusionado por la
+fuente de odometria (rtk.py o zed.py). Asi pose.py no depende de los topics
+/heading/* (rtk ya no los publica: solo emite /odom_filtered). Para comparar IMU
+crudo vs calibrado, ver imu_bridge (bueyuy/imu/heading y bueyuy/imu/heading_calibrated).
 
 Publica MQTT:
   - bueyuy/telemetry/json
 """
 
 import json
+import math
 import time
 
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Float64
 
 from buey_robot.adapters.mqtt.client import get_client
 from buey_robot.utils.config import load_config, require_key
+from buey_robot.utils.math import quaternion_to_yaw
 
 
 class PosePublisher(Node):
@@ -43,48 +46,31 @@ class PosePublisher(Node):
         # Estado agregado
         self._x = 0.0
         self._y = 0.0
-        self._heading_zed = 0.0
-        self._heading_imu = 0.0
-        self._heading_gps = 0.0
+        self._heading = 0.0
         self._odom_received = False
         self._messages_sent = 0
 
-        # Suscriptores: fuente de odometria unificada
+        # Suscriptor unico: la odometria fusionada trae posicion y heading
         self.create_subscription(Odometry, '/odom_filtered', self._odom_callback, 10)
-        self.create_subscription(Float64, '/heading/zed', self._heading_zed_callback, 10)
-        self.create_subscription(Float64, '/heading/imu', self._heading_imu_callback, 10)
-        self.create_subscription(Float64, '/heading/gps', self._heading_gps_callback, 10)
 
         self.get_logger().info(f'Pose Publisher iniciado -> {self.topic_telemetry} (por evento)')
 
     def _odom_callback(self, msg: Odometry):
         self._x = msg.pose.pose.position.x
         self._y = msg.pose.pose.position.y
+        q = msg.pose.pose.orientation
+        self._heading = math.degrees(quaternion_to_yaw(q.x, q.y, q.z, q.w))
         if not self._odom_received:
             self.get_logger().info('Primer /odom_filtered recibido')
             self._odom_received = True
         self._publish_telemetry()
 
-    def _heading_zed_callback(self, msg: Float64):
-        self._heading_zed = msg.data
-        self._publish_telemetry()
-
-    def _heading_imu_callback(self, msg: Float64):
-        self._heading_imu = msg.data
-        self._publish_telemetry()
-
-    def _heading_gps_callback(self, msg: Float64):
-        self._heading_gps = msg.data
-        self._publish_telemetry()
-
     def _publish_telemetry(self):
-        """Publica JSON consolidado con posicion y headings (por evento)."""
+        """Publica JSON consolidado con posicion y heading (por evento)."""
         payload = json.dumps({
             'x': round(self._x, 3),
             'y': round(self._y, 3),
-            'heading_zed': round(self._heading_zed, 1),
-            'heading_imu': round(self._heading_imu, 1),
-            'heading_gps': round(self._heading_gps, 1),
+            'heading': round(self._heading, 1),
             'odom_active': self._odom_received,
             'timestamp': time.time(),
         })
@@ -93,7 +79,7 @@ class PosePublisher(Node):
         if self._messages_sent == 1 or self._messages_sent % 50 == 0:
             self.get_logger().info(
                 f'Telemetry: x={self._x:.2f}, y={self._y:.2f}, '
-                f'h_gps={self._heading_gps:.1f}, odom={self._odom_received} '
+                f'heading={self._heading:.1f}, odom={self._odom_received} '
                 f'[{self._messages_sent} msgs]'
             )
 

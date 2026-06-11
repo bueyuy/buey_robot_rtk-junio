@@ -6,12 +6,13 @@ Asi se puede reportar RTK / IMU / telemetria MQTT y fijar BASE/START en el
 dashboard sin que el robot intente navegar.
 
 Nodos:
+  - micro_ros_agent           (agente microROS serial -> IMU publica /imu/data)
   - mapper/gps_nmea.py        (serial NMEA -> /gps/fix + rtk/location/json)
   - odometry/rtk.py           (GPS+IMU -> /odom_filtered)
   - adapters/mqtt/outputs/pose.py  (telemetry MQTT, incluye heading_gps)
 
 La IMU la publica microROS directamente en /imu/data (sensor_msgs/Imu); su agente
-corre en terminal aparte y no se lanza desde aca (igual que motor_gateway).
+se levanta desde este launch (ros2 run micro_ros_agent ... serial --dev /dev/ttyUSB0).
 
 motor_gateway NO se incluye — corre en terminal aparte con motor_gateway.launch.py.
 Para navegacion autonoma, lanzar ademas trajectory_controller.launch.py.
@@ -22,7 +23,7 @@ Uso:
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import TimerAction
+from launch.actions import TimerAction, ExecuteProcess
 from ament_index_python.packages import get_package_share_directory
 import os
 
@@ -34,6 +35,16 @@ def generate_launch_description():
     nav_outdoor_yaml = os.path.join(pkg_share, 'config', 'navigation_outdoor.yaml')
     sensors_yaml = os.path.join(pkg_share, 'config', 'sensors.yaml')
     imu_yaml = os.path.join(pkg_share, 'config', 'imu.yaml')
+
+    # Agente microROS de la IMU: publica /imu/data desde la placa via serial.
+    # Antes corria en terminal aparte; ahora se levanta desde este launch.
+    micro_ros_agent = ExecuteProcess(
+        cmd=[
+            'ros2', 'run', 'micro_ros_agent', 'micro_ros_agent',
+            'serial', '--dev', '/dev/ttyUSB0', '-b', '115200', '-v6',
+        ],
+        output='log',  # logs del agente van a ~/.ros/log/, no ensucian la consola
+    )
 
     # Driver GPS NMEA (serial)
     gps_node = Node(
@@ -93,6 +104,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        micro_ros_agent,
         gps_node,
         imu_compass_node,
         delayed_nodes,
