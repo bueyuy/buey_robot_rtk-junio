@@ -10,7 +10,7 @@ Mapeo:  topic ROS  ->  bueyuy/<topic-sin-slash-inicial>
   /imu/heading            -> bueyuy/imu/heading             (brujula CRUDA del firmware)
   /imu/heading_calibrated -> bueyuy/imu/heading_calibrated  (brujula CALIBRADA, nodo imu_compass)
   /heading/gyro           -> bueyuy/heading/gyro            (yaw integrado del gyro, nodo mpu6050_gyro)
-  /imu/data               -> bueyuy/imu/data                (Imu crudo MPU6050: accel+gyro)
+  /mpu6050/imu/data       -> bueyuy/mpu6050/imu/data        (Imu crudo MPU6050: accel+GYRO, firmware dual)
   /heading/imu            -> bueyuy/heading/imu             (IMU en ENU, salida de rtk.py)
   /heading/gps            -> bueyuy/heading/gps             (GPS en ENU)
   /odom_filtered          -> bueyuy/odom_filtered           (pose + velocidad)
@@ -37,7 +37,7 @@ BRIDGED = [
     ('/imu/heading', Float32, 0.0),
     ('/imu/heading_calibrated', Float32, 0.0),
     ('/heading/gyro', Float32, 0.0),
-    ('/imu/data', Imu, 0.1),             # throttle a ~10 Hz: para inspeccionar gyro/accel
+    ('/mpu6050/imu/data', Imu, 0.1),     # throttle a ~10 Hz: MPU6050 crudo (gyro), firmware dual
     ('/heading/imu', Float64, 0.0),
     ('/heading/gps', Float64, 0.0),
     ('/odom_filtered', Odometry, 0.1),   # throttle a ~10 Hz max

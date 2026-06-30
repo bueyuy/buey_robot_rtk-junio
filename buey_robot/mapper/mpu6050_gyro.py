@@ -1,10 +1,11 @@
 """mpu6050_gyro: calibra el giroscopio del MPU6050 e integra un heading de yaw.
 
-El firmware ESP32+MPU6050 (Buey_ESP32_MPU6050_microROS_fw) publica sensor_msgs/Imu
-CRUDO en /imu/data (accel + gyro, sin magnetometro). Este nodo:
+El firmware DUAL de la ESP32 (nodo esp32_dual_imu_node) publica las dos IMUs:
+/imu/data (LSM303, accel+mag, sin gyro) y /mpu6050/imu/data (MPU6050, accel+gyro).
+Este nodo consume el MPU6050 (sensor_msgs/Imu CRUDO en /mpu6050/imu/data) y:
   - resta el bias del giroscopio (de config o auto-estimado en reposo)
   - integra angular_velocity.z (yaw rate, rad/s) -> heading relativo en grados
-  - republica el Imu corregido (/imu/data_calibrated) y el heading
+  - republica el Imu corregido (/mpu6050/imu/data_calibrated) y el heading
     (/heading/gyro, junto a /heading/gps y /heading/imu)
 
 IMPORTANTE: el heading de gyro DERIVA. No tiene referencia absoluta como la

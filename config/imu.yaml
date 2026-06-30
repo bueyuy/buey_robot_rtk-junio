@@ -20,16 +20,16 @@ imu_compass:
     soft_iron: [1.0076, -0.0817, -0.0817, 1.8771]   # 2x2 fila-mayor [[a,b],[c,d]]
 
 # Giroscopio del MPU6050: bias + heading integrado (yaw).
-# El firmware ESP32+MPU6050 publica Imu CRUDO en /imu/data (accel+gyro, sin mag).
-# Este nodo resta el bias del gyro e integra yaw -> /heading/gyro (junto a
-# /heading/gps y /heading/imu). El heading de gyro DERIVA (sin referencia
-# absoluta): se expone para comparar contra mag (imu_compass) y GPS y decidir.
-# Nota: LSM303 y MPU6050 usan firmwares distintos sobre la misma ESP32, asi que
-# nunca publican /imu/data a la vez (no se reflashea: se consume el topic actual).
+# El firmware que corre en la ESP32 es DUAL (nodo esp32_dual_imu_node): publica
+# las dos IMUs -> /imu/data (LSM303, accel+mag, SIN gyro) y /mpu6050/imu/data
+# (MPU6050, accel+GYRO). Este nodo consume el MPU6050, resta el bias del gyro e
+# integra yaw -> /heading/gyro (junto a /heading/gps y /heading/imu). El heading
+# de gyro DERIVA (sin referencia absoluta): se expone para comparar contra mag
+# (imu_compass, sobre /imu/mag de la LSM303) y GPS y decidir. No requiere reflash.
 mpu6050_gyro:
   ros__parameters:
-    imu_topic: "/imu/data"                    # entrada cruda (Imu accel+gyro del firmware actual)
-    data_calibrated_topic: "/imu/data_calibrated"
+    imu_topic: "/mpu6050/imu/data"            # MPU6050 crudo (accel+gyro) del firmware dual
+    data_calibrated_topic: "/mpu6050/imu/data_calibrated"
     heading_topic: "/heading/gyro"            # junto a /heading/gps y /heading/imu
 
     # Bias del giroscopio en rad/s [x, y, z], restado a angular_velocity.
