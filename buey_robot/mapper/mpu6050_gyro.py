@@ -60,6 +60,7 @@ class Mpu6050Gyro(Node):
         self.declare_parameter('gps_min_speed', Parameter.Type.DOUBLE)
         self.declare_parameter('gps_require_rtk', Parameter.Type.BOOL)
         self.declare_parameter('offset_alpha', Parameter.Type.DOUBLE)
+        self.declare_parameter('offset_init_samples', Parameter.Type.INTEGER)
 
         self.imu_topic = self.get_parameter('imu_topic').value
         self.data_cal_topic = self.get_parameter('data_calibrated_topic').value
@@ -79,6 +80,7 @@ class Mpu6050Gyro(Node):
         self.gps_min_speed = self.get_parameter('gps_min_speed').value
         self.gps_require_rtk = self.get_parameter('gps_require_rtk').value
         self.offset_alpha = self.get_parameter('offset_alpha').value
+        self.init_samples = self.get_parameter('offset_init_samples').value
 
         # Estado de integracion
         self._last_time = None  # seg (reloj del nodo)
@@ -89,8 +91,11 @@ class Mpu6050Gyro(Node):
         self._n = 0
 
         # Estado de fusion con GPS: offset (grados) que lleva el gyro al frame
-        # absoluto ENU del COG GPS. None hasta la primera correccion valida.
+        # absoluto ENU del COG GPS. None hasta completar el warm-up inicial.
         self._gps_offset = None
+        self._init_sin = 0.0  # acumuladores media circular del warm-up
+        self._init_cos = 0.0
+        self._init_n = 0
 
         self.heading_pub = self.create_publisher(Float32, self.heading_topic, 10)
         self.data_pub = self.create_publisher(Imu, self.data_cal_topic, 10)
@@ -169,9 +174,17 @@ class Mpu6050Gyro(Node):
         target = _wrap180(gps_ref - self.heading_deg)
 
         if self._gps_offset is None:
-            self._gps_offset = target
-            self.get_logger().info(
-                f'fusion GPS: offset inicial={target:.1f} deg (cog={track:.1f}, v={speed:.2f})')
+            # Warm-up: no fijar el offset en la primera muestra (el COG al arrancar
+            # es transitorio y deja un snap corrido). Promediar (media circular)
+            # init_samples muestras consecutivas en movimiento -> snap robusto.
+            self._init_sin += math.sin(math.radians(target))
+            self._init_cos += math.cos(math.radians(target))
+            self._init_n += 1
+            if self._init_n >= self.init_samples:
+                self._gps_offset = math.degrees(math.atan2(self._init_sin, self._init_cos))
+                self.get_logger().info(
+                    f'fusion GPS: offset inicial={self._gps_offset:.1f} deg '
+                    f'(media de {self._init_n} muestras)')
         else:
             err = _wrap180(target - self._gps_offset)
             self._gps_offset = _wrap180(self._gps_offset + self.offset_alpha * err)

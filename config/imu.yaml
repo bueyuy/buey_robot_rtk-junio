@@ -58,4 +58,10 @@ mpu6050_gyro:
     fused_heading_topic: "/heading/fused"
     gps_min_speed: 0.30               # m/s: COG confiable solo por encima de esto
     gps_require_rtk: true             # exigir RTK fix (status>=2) para corregir offset
-    offset_alpha: 0.03                # suavizado del offset (bajo = lento/estable)
+    # Suavizado del offset. Probado 2026-06-30: 0.03 (tau~33s) converge muy lento
+    # -> en un rectangulo de rectas cortas arrastra un snap inicial malo (-18 deg).
+    # 0.10 (tau~10s) re-alinea en cada recta y enmascara el error de escala del
+    # gyro (~-1.4%), sin meter mucho ruido del COG. Subir si converge lento;
+    # bajar si el heading se pone nervioso en las rectas.
+    offset_alpha: 0.10
+    offset_init_samples: 5            # muestras en movimiento a promediar para el snap inicial (evita lock con COG transitorio al arrancar)
