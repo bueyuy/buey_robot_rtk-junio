@@ -34,9 +34,11 @@ setup(
             'rtk_odometry = buey_robot.odometry.rtk:main',
 
             # Sensores (drivers de hardware)
-            # IMU: micro-ROS publica el campo crudo /imu/mag; imu_compass calcula heading.
+            # IMU LSM303: micro-ROS publica el campo crudo /imu/mag; imu_compass -> heading.
+            # IMU MPU6050: micro-ROS publica /imu/data (accel+gyro); mpu6050_gyro -> bias + heading yaw.
             'gps_nmea_driver = buey_robot.mapper.gps_nmea:main',
             'imu_compass = buey_robot.mapper.imu_compass:main',
+            'mpu6050_gyro = buey_robot.mapper.mpu6050_gyro:main',
 
             # Motor
             'motor_gateway = buey_robot.motor.gateway:main',

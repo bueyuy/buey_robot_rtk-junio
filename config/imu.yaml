@@ -18,3 +18,30 @@ imu_compass:
     # Recapturado en vivo (imu_cal_live) 2026-06-11. n=154, residual=0.32, cobertura_cal=83%.
     hard_iron: [-88.96, 351.13]            # offset [x, y]
     soft_iron: [1.0076, -0.0817, -0.0817, 1.8771]   # 2x2 fila-mayor [[a,b],[c,d]]
+
+# Giroscopio del MPU6050: bias + heading integrado (yaw).
+# El firmware ESP32+MPU6050 publica Imu CRUDO en /imu/data (accel+gyro, sin mag).
+# Este nodo resta el bias del gyro e integra yaw -> /heading/gyro (junto a
+# /heading/gps y /heading/imu). El heading de gyro DERIVA (sin referencia
+# absoluta): se expone para comparar contra mag (imu_compass) y GPS y decidir.
+# Nota: LSM303 y MPU6050 usan firmwares distintos sobre la misma ESP32, asi que
+# nunca publican /imu/data a la vez (no se reflashea: se consume el topic actual).
+mpu6050_gyro:
+  ros__parameters:
+    imu_topic: "/imu/data"                    # entrada cruda (Imu accel+gyro del firmware actual)
+    data_calibrated_topic: "/imu/data_calibrated"
+    heading_topic: "/heading/gyro"            # junto a /heading/gps y /heading/imu
+
+    # Bias del giroscopio en rad/s [x, y, z], restado a angular_velocity.
+    # Si auto_bias_enabled, se re-estima al arrancar con el robot QUIETO y este
+    # valor queda solo como fallback.
+    gyro_bias: [0.0, 0.0, 0.0]
+
+    # Auto-estimacion de bias en reposo al arrancar
+    auto_bias_enabled: true
+    auto_bias_samples: 200            # muestras quietas a promediar (~10s a 20Hz)
+    stationary_thresh: 0.05           # |gyro| rad/s para considerar "quieto" (~2.9 deg/s)
+
+    # Integracion de heading (yaw)
+    heading_initial_deg: 0.0          # heading inicial en grados
+    heading_invert: false             # invertir signo si el yaw integra al reves

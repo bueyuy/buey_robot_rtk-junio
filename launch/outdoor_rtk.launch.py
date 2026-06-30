@@ -8,6 +8,8 @@ dashboard sin que el robot intente navegar.
 Nodos:
   - micro_ros_agent           (agente microROS serial -> IMU publica /imu/data)
   - mapper/gps_nmea.py        (serial NMEA -> /gps/fix + rtk/location/json)
+  - mapper/imu_compass.py     (/imu/mag crudo -> /imu/heading_calibrated)
+  - mapper/mpu6050_gyro.py    (/imu/data crudo -> bias gyro + /heading/gyro)
   - odometry/rtk.py           (GPS+IMU -> /odom_filtered)
   - adapters/mqtt/outputs/pose.py  (telemetry MQTT, incluye heading_gps)
 
@@ -64,6 +66,15 @@ def generate_launch_description():
         parameters=[imu_yaml],
     )
 
+    # Gyro MPU6050: /imu/data (crudo) -> bias + /heading/gyro
+    mpu6050_gyro_node = Node(
+        package='buey_robot',
+        executable='mpu6050_gyro',
+        name='mpu6050_gyro',
+        output='screen',
+        parameters=[imu_yaml],
+    )
+
     # Bridge MQTT de IMU/heading/odom para el panel de telemetria
     imu_bridge_node = Node(
         package='buey_robot',
@@ -107,5 +118,6 @@ def generate_launch_description():
         micro_ros_agent,
         gps_node,
         imu_compass_node,
+        mpu6050_gyro_node,
         delayed_nodes,
     ])
