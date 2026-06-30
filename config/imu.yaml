@@ -45,3 +45,17 @@ mpu6050_gyro:
     # Integracion de heading (yaw)
     heading_initial_deg: 0.0          # heading inicial en grados
     heading_invert: false             # invertir signo si el yaw integra al reves
+
+    # --- Fusion con COG del GPS (heading absoluto sin drift) ---
+    # Con el robot en movimiento y RTK fix, el COG del GPS da heading absoluto
+    # confiable. Se estima offset = (90 - cog) - gyro y se suma al gyro: el gyro
+    # aporta los giros (suave, sin lag) y el GPS corrige el cero arbitrario y el
+    # drift (lento). Salida /heading/fused en frame ENU: es EL heading fusionado
+    # que consume rtk.py (gps.imu.heading_is_enu=true) para /odom_filtered, y que
+    # llega a telemetria via pose_publisher. /heading/gyro (crudo) sigue aparte.
+    gps_fusion_enabled: true
+    gps_fix_topic: "/gps/fix"
+    fused_heading_topic: "/heading/fused"
+    gps_min_speed: 0.30               # m/s: COG confiable solo por encima de esto
+    gps_require_rtk: true             # exigir RTK fix (status>=2) para corregir offset
+    offset_alpha: 0.03                # suavizado del offset (bajo = lento/estable)

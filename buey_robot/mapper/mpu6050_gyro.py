@@ -7,6 +7,11 @@ Este nodo consume el MPU6050 (sensor_msgs/Imu CRUDO en /mpu6050/imu/data) y:
   - integra angular_velocity.z (yaw rate, rad/s) -> heading relativo en grados
   - republica el Imu corregido (/mpu6050/imu/data_calibrated) y el heading
     (/heading/gyro, junto a /heading/gps y /heading/imu)
+  - (opcional) fusiona con el COG del GPS: en movimiento + RTK fix estima un
+    offset y lo suma al gyro -> /heading/fused, heading ABSOLUTO ENU sin drift
+    (gyro = parte rapida de los giros; GPS = referencia absoluta lenta). Ese
+    /heading/fused es EL heading que rtk.py adopta para /odom_filtered (con
+    gps.imu.heading_is_enu=true) y que llega a telemetria via pose_publisher.
 
 IMPORTANTE: el heading de gyro DERIVA. No tiene referencia absoluta como la
 brujula (mag, LSM303) o el COG del GPS: es suave y preciso a corto plazo pero
@@ -25,6 +30,12 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Float32
+from gps_msgs.msg import GPSFix
+
+
+def _wrap180(a):
+    """Normaliza un angulo en grados a (-180, 180]."""
+    return (a + 180.0) % 360.0 - 180.0
 
 
 class Mpu6050Gyro(Node):
@@ -42,6 +53,13 @@ class Mpu6050Gyro(Node):
         self.declare_parameter('stationary_thresh', Parameter.Type.DOUBLE)
         self.declare_parameter('heading_initial_deg', Parameter.Type.DOUBLE)
         self.declare_parameter('heading_invert', Parameter.Type.BOOL)
+        # Fusion con COG del GPS (heading absoluto sin drift)
+        self.declare_parameter('gps_fusion_enabled', Parameter.Type.BOOL)
+        self.declare_parameter('gps_fix_topic', Parameter.Type.STRING)
+        self.declare_parameter('fused_heading_topic', Parameter.Type.STRING)
+        self.declare_parameter('gps_min_speed', Parameter.Type.DOUBLE)
+        self.declare_parameter('gps_require_rtk', Parameter.Type.BOOL)
+        self.declare_parameter('offset_alpha', Parameter.Type.DOUBLE)
 
         self.imu_topic = self.get_parameter('imu_topic').value
         self.data_cal_topic = self.get_parameter('data_calibrated_topic').value
@@ -55,6 +73,12 @@ class Mpu6050Gyro(Node):
         self.stationary_thresh = self.get_parameter('stationary_thresh').value
         self.heading_deg = self.get_parameter('heading_initial_deg').value
         self.heading_invert = self.get_parameter('heading_invert').value
+        self.gps_fusion = self.get_parameter('gps_fusion_enabled').value
+        self.gps_fix_topic = self.get_parameter('gps_fix_topic').value
+        self.fused_topic = self.get_parameter('fused_heading_topic').value
+        self.gps_min_speed = self.get_parameter('gps_min_speed').value
+        self.gps_require_rtk = self.get_parameter('gps_require_rtk').value
+        self.offset_alpha = self.get_parameter('offset_alpha').value
 
         # Estado de integracion
         self._last_time = None  # seg (reloj del nodo)
@@ -64,12 +88,25 @@ class Mpu6050Gyro(Node):
         self._acc = [0.0, 0.0, 0.0]
         self._n = 0
 
+        # Estado de fusion con GPS: offset (grados) que lleva el gyro al frame
+        # absoluto ENU del COG GPS. None hasta la primera correccion valida.
+        self._gps_offset = None
+
         self.heading_pub = self.create_publisher(Float32, self.heading_topic, 10)
         self.data_pub = self.create_publisher(Imu, self.data_cal_topic, 10)
         self.create_subscription(Imu, self.imu_topic, self._imu_callback, 10)
 
+        if self.gps_fusion:
+            self.fused_pub = self.create_publisher(Float32, self.fused_topic, 10)
+            self.create_subscription(GPSFix, self.gps_fix_topic, self._gps_callback, 10)
+
         self.get_logger().info(
             f'mpu6050_gyro: {self.imu_topic} -> {self.heading_topic} (+ {self.data_cal_topic})')
+        if self.gps_fusion:
+            self.get_logger().info(
+                f'  fusion GPS: ON, {self.gps_fix_topic} -> {self.fused_topic} '
+                f'(min_speed={self.gps_min_speed}, require_rtk={self.gps_require_rtk}, '
+                f'alpha={self.offset_alpha})')
         if self._calibrating:
             self.get_logger().info(
                 f'  auto-bias: ON (mantener el robot QUIETO, {self.auto_samples} muestras)')
@@ -102,7 +139,42 @@ class Mpu6050Gyro(Node):
                 self.heading_deg = (self.heading_deg + math.degrees(dpsi)) % 360.0
 
         self.heading_pub.publish(Float32(data=float(self.heading_deg)))
+
+        # Heading fusionado: gyro + offset GPS (absoluto ENU, sin drift). Solo
+        # una vez que el GPS fijo el offset al menos una vez.
+        if self.gps_fusion and self._gps_offset is not None:
+            fused = (self.heading_deg + self._gps_offset) % 360.0
+            self.fused_pub.publish(Float32(data=float(fused)))
+
         self._publish_calibrated(msg)
+
+    def _gps_callback(self, msg: GPSFix):
+        """Alinea el gyro al COG del GPS en movimiento (complementario lento).
+
+        El COG del GPS es heading absoluto confiable con RTK fix y velocidad. Se
+        convierte a yaw ENU (90 - track, igual que rtk.py) y se estima el offset
+        gyro->absoluto, suavizado con offset_alpha para no seguir el ruido del COG.
+        """
+        speed = msg.speed
+        if speed < self.gps_min_speed:
+            return
+        if self.gps_require_rtk and msg.status.status < 2:
+            return
+        track = msg.track
+        if math.isnan(track) or math.isnan(speed):
+            return
+
+        # COG brujula -> yaw ENU (mismo frame que /heading/gps en rtk.py)
+        gps_ref = (90.0 - track) % 360.0
+        target = _wrap180(gps_ref - self.heading_deg)
+
+        if self._gps_offset is None:
+            self._gps_offset = target
+            self.get_logger().info(
+                f'fusion GPS: offset inicial={target:.1f} deg (cog={track:.1f}, v={speed:.2f})')
+        else:
+            err = _wrap180(target - self._gps_offset)
+            self._gps_offset = _wrap180(self._gps_offset + self.offset_alpha * err)
 
     def _collect_bias(self, wx, wy, wz):
         """Promedia el gyro con el robot quieto para estimar el bias."""

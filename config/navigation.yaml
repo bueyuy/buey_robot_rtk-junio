@@ -45,17 +45,17 @@
         min_movement_threshold: 0.1 # movimiento minimo para calcular heading GPS (m)
         filter_alpha: 0.15          # suavizado exponencial del heading GPS (bajado de 0.3: amortigua el transitorio basura del curso GPS al arrancar, que con fusion GPS-heavy mandaba un giro equivocado)
       imu:
-        use_imu_heading: true      # usar fusion GPS+IMU en odometry/rtk.py
-        fusion_alpha: 0.2           # peso del IMU en fusion. Probado en campo 2026-06-04: con 0.9 (IMU) el robot se fue 60deg del rumbo real (motores corrompen el magnetometro al girar); el curso GPS sigue el movimiento real -> confiar en GPS a crucero.
-        fusion_min_speed: 0.3       # velocidad minima para activar fusion (m/s)
-        # Topic del heading de brujula que consume rtk.py. Por defecto el
-        # calibrado (nodo imu_compass). Para volver al crudo del firmware: /imu/heading
-        heading_topic: "/imu/heading_calibrated"
-        # Declinacion magnetica para convertir brujula -> Norte geografico.
-        # Uruguay ~ -8.5 grados, pero este valor ABSORBE ademas el offset de
-        # montaje + convencion de la brujula calibrada (imu_compass, invert=true).
-        # Calibrado empiricamente 2026-06-04 con invert=true: ~ -90.5 (provisional,
-        # afinar comparando /heading/imu vs /heading/gps en recta hasta delta~0).
+        use_imu_heading: true      # usar el heading IMU en odometry/rtk.py
+        fusion_alpha: 0.2           # (solo modo brujula) peso del IMU en la fusion complementaria
+        fusion_min_speed: 0.3       # (solo modo brujula) velocidad minima para fusionar (m/s)
+        # heading_is_enu: el heading que consume rtk YA viene fusionado y en yaw
+        # ENU (no es brujula). Lo publica el nodo mpu6050_gyro como /heading/fused
+        # (gyro + offset COG GPS, absoluto sin drift). rtk lo adopta directo como
+        # current_heading: NO re-transforma (sin 90-x ni declinacion) ni re-fusiona.
+        # Poner false para volver al modo brujula (heading_topic absoluto compass).
+        heading_is_enu: true
+        heading_topic: "/heading/fused"
+        # (solo modo brujula, heading_is_enu=false) declinacion magnetica.
         magnetic_declination_deg: -90.5
 
     joystick:

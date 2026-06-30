@@ -39,6 +39,7 @@ class RTKOdometry(Node):
         self.declare_parameter('gps.imu.fusion_min_speed', Parameter.Type.DOUBLE)
         self.declare_parameter('gps.imu.magnetic_declination_deg', Parameter.Type.DOUBLE)
         self.declare_parameter('gps.imu.heading_topic', Parameter.Type.STRING)
+        self.declare_parameter('gps.imu.heading_is_enu', Parameter.Type.BOOL)
         self.declare_parameter('gps.frame_id', Parameter.Type.STRING)
 
         self.auto_set_origin = self.get_parameter('gps.origin.auto_set').value
@@ -54,6 +55,7 @@ class RTKOdometry(Node):
         self.fusion_min_speed = self.get_parameter('gps.imu.fusion_min_speed').value
         self.magnetic_declination = self.get_parameter('gps.imu.magnetic_declination_deg').value
         self.imu_heading_topic = self.get_parameter('gps.imu.heading_topic').value
+        self.heading_is_enu = self.get_parameter('gps.imu.heading_is_enu').value
         self.frame_id = self.get_parameter('gps.frame_id').value
 
         # Conversor GPS y filtros
@@ -165,7 +167,26 @@ class RTKOdometry(Node):
         self._publish_odometry(msg)
 
     def imu_callback(self, msg: Float32):
-        """Callback heading IMU desde /imu/heading (Float32, grados de brujula).
+        """Callback heading IMU (Float32, grados).
+
+        Dos modos segun gps.imu.heading_is_enu:
+
+        - ENU (gyro): el heading YA viene fusionado y en yaw ENU (lo produce
+          mpu6050_gyro como /heading/fused = gyro + offset COG GPS). Se adopta
+          directo como current_heading; rtk NO re-transforma ni re-fusiona.
+
+        - Brujula (mag): el heading es absoluto en convencion brujula y se
+          convierte a yaw ENU para fusionarlo con el GPS en _fuse_heading.
+        """
+        if self.heading_is_enu:
+            self.current_heading = angle_normalize(math.radians(msg.data))
+            self.imu_heading = self.current_heading
+            self.imu_heading_received = True
+            return
+        self._imu_callback_compass(msg)
+
+    def _imu_callback_compass(self, msg: Float32):
+        """Modo brujula: convierte heading de brujula a yaw ENU y fusiona con GPS.
 
         Convierte la convencion de brujula a yaw ENU, que es el marco en que
         trabaja todo rtk.py (igual que el heading GPS), para poder fusionarlos:
@@ -203,6 +224,11 @@ class RTKOdometry(Node):
         a yaw ENU (0=Este, antihorario) para ser consistente con el resto del sistema.
         """
         self.current_speed = speed
+
+        # Modo ENU: el heading viene ya fusionado por mpu6050_gyro (/heading/fused);
+        # rtk no calcula ni fusiona heading GPS aca (no pisar current_heading).
+        if self.heading_is_enu:
+            return
 
         if self.current_speed > self.min_movement:
             # COG brujula -> yaw ENU: yaw = 90 - track
