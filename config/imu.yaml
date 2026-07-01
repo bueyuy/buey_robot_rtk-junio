@@ -56,7 +56,12 @@ mpu6050_gyro:
     gps_fusion_enabled: true
     gps_fix_topic: "/gps/fix"
     fused_heading_topic: "/heading/fused"
-    gps_min_speed: 0.30               # m/s: COG confiable solo por encima de esto
+    # m/s: COG confiable solo por encima de esto. Probado 2026-07-01: el robot
+    # crucero a ~0.25-0.29 nunca cruzo 0.30 -> el offset no inicializo y odomYaw
+    # quedo en 0 toda la corrida. 0.20 entra en rectas lentas y sigue excluyendo
+    # los giros en el lugar (ahi la traslacion GPS queda baja). RTK da COG fiable
+    # a 0.2 m/s (20cm/s de delta >> ruido RTK ~1-2cm).
+    gps_min_speed: 0.20
     gps_require_rtk: true             # exigir RTK fix (status>=2) para corregir offset
     # Suavizado del offset. Probado 2026-06-30: 0.03 (tau~33s) converge muy lento
     # -> en un rectangulo de rectas cortas arrastra un snap inicial malo (-18 deg).
@@ -64,4 +69,9 @@ mpu6050_gyro:
     # gyro (~-1.4%), sin meter mucho ruido del COG. Subir si converge lento;
     # bajar si el heading se pone nervioso en las rectas.
     offset_alpha: 0.10
-    offset_init_samples: 5            # muestras en movimiento a promediar para el snap inicial (evita lock con COG transitorio al arrancar)
+    offset_init_samples: 5            # muestras (yendo derecho) a promediar para el snap inicial
+    # Solo corregir el offset cuando |yaw rate| < esto (rad/s): yendo DERECHO.
+    # Probado 2026-07-01: sin este gate, el snap y el offset se corrompian en los
+    # giros (COG GPS laggea al gyro) -> err inicial -124 deg y saltos post-giro.
+    # 0.08 rad/s ~= 4.6 deg/s (giros del robot ~8 deg/s quedan excluidos).
+    straight_max_yaw_rate: 0.08

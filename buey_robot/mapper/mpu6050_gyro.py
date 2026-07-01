@@ -61,6 +61,7 @@ class Mpu6050Gyro(Node):
         self.declare_parameter('gps_require_rtk', Parameter.Type.BOOL)
         self.declare_parameter('offset_alpha', Parameter.Type.DOUBLE)
         self.declare_parameter('offset_init_samples', Parameter.Type.INTEGER)
+        self.declare_parameter('straight_max_yaw_rate', Parameter.Type.DOUBLE)
 
         self.imu_topic = self.get_parameter('imu_topic').value
         self.data_cal_topic = self.get_parameter('data_calibrated_topic').value
@@ -81,6 +82,7 @@ class Mpu6050Gyro(Node):
         self.gps_require_rtk = self.get_parameter('gps_require_rtk').value
         self.offset_alpha = self.get_parameter('offset_alpha').value
         self.init_samples = self.get_parameter('offset_init_samples').value
+        self.straight_max_yaw_rate = self.get_parameter('straight_max_yaw_rate').value
 
         # Estado de integracion
         self._last_time = None  # seg (reloj del nodo)
@@ -93,6 +95,7 @@ class Mpu6050Gyro(Node):
         # Estado de fusion con GPS: offset (grados) que lleva el gyro al frame
         # absoluto ENU del COG GPS. None hasta completar el warm-up inicial.
         self._gps_offset = None
+        self._yaw_rate = 0.0  # rad/s, ultimo yaw rate con bias corregido (gate de recta)
         self._init_sin = 0.0  # acumuladores media circular del warm-up
         self._init_cos = 0.0
         self._init_n = 0
@@ -129,6 +132,7 @@ class Mpu6050Gyro(Node):
 
         # Restar bias
         cwz = wz - self.bias[2]
+        self._yaw_rate = cwz  # para el gate de "yendo derecho" de la fusion GPS
 
         now = self.get_clock().now().nanoseconds * 1e-9
         if self._last_time is None:
@@ -167,6 +171,11 @@ class Mpu6050Gyro(Node):
             return
         track = msg.track
         if math.isnan(track) or math.isnan(speed):
+            return
+        # Solo corregir el offset YENDO DERECHO: en giros el COG GPS laggea al
+        # gyro e inyecta error (y un snap durante un giro queda muy corrido).
+        # |yaw rate| bajo = recta.
+        if abs(self._yaw_rate) > self.straight_max_yaw_rate:
             return
 
         # COG brujula -> yaw ENU (mismo frame que /heading/gps en rtk.py)
