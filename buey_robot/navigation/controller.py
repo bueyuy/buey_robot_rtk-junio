@@ -10,12 +10,13 @@ de odometria correspondiente.
 
 import math
 
+import yaml
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from std_msgs.msg import String
+from std_msgs.msg import String, Float32
 
 from buey_robot.adapters.mqtt.client import get_client
 from buey_robot.adapters.mqtt.inputs.positions import MqttPositionsInput
@@ -50,6 +51,14 @@ class TrajectoryController(Node, ArcStateMixin):
         _d('controller.ramp.accel_rate_angular', T.DOUBLE); _d('controller.ramp.decel_rate_angular', T.DOUBLE)
         _d('controller.arc.linear_m_s', T.DOUBLE);  _d('controller.arc.angular_rad_s', T.DOUBLE)
         _d('controller.arc.start_distance_m', T.DOUBLE)
+        # Creep recto inicial: avanzar en linea recta antes de navegar para generar
+        # COG y alinear el heading fused (gyro+GPS) — sin esto el robot rota en el
+        # lugar con un heading todavia sin alinear.
+        _d('controller.prealign.enabled', T.BOOL)
+        _d('controller.prealign.distance_m', T.DOUBLE)
+        # Esperar la calibracion del gyro (auto-bias, robot quieto) antes de moverse.
+        # mpu6050_gyro solo publica /heading/gyro DESPUES de calibrar el bias.
+        _d('controller.wait_for_gyro_calibration', T.BOOL)
         _d('auto_load_waypoints', T.STRING)
         _d('goal_source', T.STRING)  # "waypoints_file" | "mqtt_positions"
         # Motor params — el gateway los lee por separado; aqui solo para publicar config MQTT
@@ -69,6 +78,14 @@ class TrajectoryController(Node, ArcStateMixin):
         self.min_linear = gp('controller.velocity.min_linear_m_s').value
         self.angular_gain = gp('controller.angular.proportional_gain').value
         self.decel_distance = gp('controller.deceleration.distance_m').value
+        self.prealign_enabled = gp('controller.prealign.enabled').value
+        self.prealign_distance = gp('controller.prealign.distance_m').value
+        self._prealign_done = False
+        self._prealign_start = None
+        self.wait_for_gyro_cal = gp('controller.wait_for_gyro_calibration').value
+        # mpu6050_gyro publica /heading/gyro solo tras calibrar el bias -> el primer
+        # mensaje = gyro calibrado. Hasta entonces el robot no se mueve.
+        self._gyro_calibrated = not self.wait_for_gyro_cal
 
         # Rampas independientes para linear y angular
         self.ramp_linear = RampProfile(
@@ -105,7 +122,9 @@ class TrajectoryController(Node, ArcStateMixin):
         # de modo que cae en el mismo frame que /odom_filtered.
         self._gps_converter = GPSConverter()
         self._start = None
-        if self.goal_source == 'mqtt_positions':
+        # mqtt_positions y waypoints_gps comparten el origen BASE (mismo frame que
+        # rtk.py). waypoints_gps ademas navega una lista de waypoints lat/lon.
+        if self.goal_source in ('mqtt_positions', 'waypoints_gps'):
             topics = {
                 'base': require_key(mqtt_cfg, 'topics', 'positions_base'),
                 'start': require_key(mqtt_cfg, 'topics', 'positions_start'),
@@ -128,6 +147,11 @@ class TrajectoryController(Node, ArcStateMixin):
         # Subscriber: /odom_filtered ya viene procesada desde el nodo de odometria
         self.create_subscription(Odometry, '/odom_filtered', self.odom_callback, 10)
 
+        # Señal de gyro calibrado: mpu6050_gyro publica /heading/gyro recien tras
+        # el auto-bias. El primer mensaje habilita el movimiento.
+        if self.wait_for_gyro_cal:
+            self.create_subscription(Float32, '/heading/gyro', self._gyro_ready_cb, 10)
+
         # Timers
         self.create_timer(1.0 / self.frequency, self.control_loop)
 
@@ -135,6 +159,9 @@ class TrajectoryController(Node, ArcStateMixin):
         if self.goal_source == 'mqtt_positions':
             self.mqtt_goal_timer = self.create_timer(1.0, self.try_load_mqtt_goal)
             self.get_logger().info('Meta desde MQTT: navegacion BASE->START')
+        elif self.goal_source == 'waypoints_gps':
+            self.gps_wp_timer = self.create_timer(1.0, self.try_load_gps_waypoints)
+            self.get_logger().info(f'Waypoints GPS (lat/lon): {self.waypoint_file} (origen=BASE)')
         elif self.waypoint_file:
             self.auto_load_timer = self.create_timer(1.0, self.try_auto_load_waypoints)
             self.get_logger().info(f'Auto-carga configurada: {self.waypoint_file}')
@@ -164,6 +191,12 @@ class TrajectoryController(Node, ArcStateMixin):
                 f'Primer odom: x={self.current_x:.2f}, y={self.current_y:.2f}, '
                 f'heading={math.degrees(self.current_heading):.1f} deg'
             )
+
+    def _gyro_ready_cb(self, msg: Float32):
+        """Primer /heading/gyro = mpu6050_gyro termino el auto-bias -> habilita mover."""
+        if not self._gyro_calibrated:
+            self._gyro_calibrated = True
+            self.get_logger().info('Gyro calibrado (primer /heading/gyro) — navegacion habilitada')
 
     def _publish_config_once(self):
         if self._config_published or not self._mqtt.is_connected:
@@ -261,6 +294,58 @@ class TrajectoryController(Node, ArcStateMixin):
         except Exception as e:
             self.get_logger().error(f'Error cargando meta START: {e}')
 
+    def try_load_gps_waypoints(self):
+        """Carga waypoints en lat/lon ABSOLUTO y los convierte a local con el
+        origen BASE (mismo frame que /odom_filtered), igual que la meta START.
+
+        A diferencia de load_from_file (local x,y relativo al arranque), aca los
+        waypoints quedan FIJOS en su posicion GPS: no se desplazan si el robot
+        arranca corrido. Requiere use_mqtt_base=true (BASE del dashboard).
+        """
+        if self.auto_load_attempted:
+            return
+        if not self.odom_received:
+            return
+        if not self._gps_converter.origin_set:
+            self.get_logger().warn(
+                'Esperando BASE (bueyuy/positions/base) para fijar el origen GPS...',
+                throttle_duration_sec=5.0,
+            )
+            return
+
+        try:
+            with open(self.waypoint_file) as f:
+                data = yaml.safe_load(f)
+            if not data or 'waypoints' not in data:
+                raise ValueError(f"YAML '{self.waypoint_file}' no contiene 'waypoints'")
+
+            local = []
+            for wp in data['waypoints']:
+                if 'lat' not in wp or 'lon' not in wp:
+                    raise ValueError(f"Waypoint GPS invalido (falta lat/lon): {wp}")
+                gx, gy = self._gps_converter.gps_to_local(
+                    float(wp['lat']), float(wp['lon']))
+                local.append((gx, gy))
+            if not local:
+                raise ValueError('No se encontraron waypoints')
+
+            self.wp_manager.set_waypoints(local)
+            self.trajectory_active = True
+            self.aligning = False
+            self.auto_load_attempted = True
+
+            if hasattr(self, 'gps_wp_timer'):
+                self.gps_wp_timer.cancel()
+
+            self.get_logger().info(f'Cargados {len(local)} waypoints GPS (origen=BASE):')
+            for i, (wx, wy) in enumerate(local):
+                self.get_logger().info(f'  WP{i}: x={wx:.2f}, y={wy:.2f}')
+
+            self.waypoints_output.send_xy(self.wp_manager.waypoints)
+
+        except Exception as e:
+            self.get_logger().error(f'Error cargando waypoints GPS: {e}')
+
     def control_loop(self):
         if self.current_x is None or self.current_y is None:
             return
@@ -285,10 +370,48 @@ class TrajectoryController(Node, ArcStateMixin):
 
         goal_x, goal_y = goal
 
+        # Esperar la calibracion del gyro (auto-bias con el robot QUIETO) antes de
+        # cualquier movimiento. Hasta el primer /heading/gyro el robot no se mueve.
+        if not self._gyro_calibrated:
+            self._publish_stop()
+            self._publish_status('Esperando calibracion del gyro (robot quieto)...')
+            return
+
+        # Creep recto inicial: antes de rotar/navegar, avanzar en linea recta para
+        # generar COG y que el heading fused (gyro+GPS) se alinee. Sin esto el robot
+        # rota en el lugar con un heading todavia sin alinear.
+        if self.prealign_enabled and not self._prealign_done:
+            self._prealign_straight()
+            return
+
         if self.mode == 'arc':
             self._control_arc(goal_x, goal_y)
         else:
             self._control_stop_and_turn(goal_x, goal_y)
+
+    def _prealign_straight(self):
+        """Avanza recto self.prealign_distance para generar COG y alinear el heading
+        fused (gyro+GPS) antes de navegar. Evita rotar en el lugar sin heading."""
+        if self._prealign_start is None:
+            self._prealign_start = (self.current_x, self.current_y)
+            self.ramp_linear.reset()
+            self.get_logger().info(
+                f'Pre-alineacion: avanzando {self.prealign_distance:.2f}m recto para generar COG')
+        dx = self.current_x - self._prealign_start[0]
+        dy = self.current_y - self._prealign_start[1]
+        traveled = math.sqrt(dx * dx + dy * dy)
+
+        if traveled >= self.prealign_distance:
+            self._prealign_done = True
+            self.ramp_linear.reset()
+            self.get_logger().info(
+                f'Pre-alineacion completa ({traveled:.2f}m) — navegando')
+            return
+
+        linear_vel = self.ramp_linear.apply(self.cruise_linear)
+        self._publish_velocity(linear_vel, 0.0)  # recto: sin componente angular
+        self._publish_status(
+            f'Pre-align recto {traveled:.2f}/{self.prealign_distance:.2f}m (generando COG)')
 
     def _control_stop_and_turn(self, goal_x: float, goal_y: float):
         """Modo stop_and_turn: girar, avanzar, frenar, repetir."""

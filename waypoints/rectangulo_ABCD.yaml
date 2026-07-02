@@ -1,0 +1,30 @@
+# Rectangulo ABCD extraido de resource/telemetry_2026-07-02T19-53-42.json
+# ("marcar los cuatro puntos", RTK fixed q=4, 12 sats -> precision cm; lat/lon
+# promediado en cada parada).
+#
+# Coordenadas GPS ABSOLUTAS (lat/lon). El controller (goal_source: waypoints_gps)
+# las convierte a local con el origen BASE, el mismo frame que rtk.py/odom_filtered.
+# Los puntos quedan FIJOS en su posicion GPS: NO se desplazan si el robot arranca
+# corrido (a diferencia del formato local x,y relativo al arranque).
+#
+# A es el ORIGEN (arranque): el robot arranca ahi y NO figura como waypoint.
+# Con el creep recto inicial (controller.prealign) avanza para generar COG y
+# alinear el heading, y despues navega B -> C -> D -> A (cierre).
+#
+#   A (origen): lat -34.88083573, lon -56.15160369
+#   Lados medidos: A-B=3.92  B-C=2.39  C-D=3.51  D-A=2.44 m
+#
+# Requiere use_mqtt_base=true y la BASE publicada por el dashboard.
+waypoints:
+  # B
+  - lat: -34.88086011
+    lon: -56.15163464
+  # C
+  - lat: -34.88087342
+    lon: -56.15161409
+  # D
+  - lat: -34.88085204
+    lon: -56.15158580
+  # cierre: volver a A (origen)
+  - lat: -34.88083573
+    lon: -56.15160369

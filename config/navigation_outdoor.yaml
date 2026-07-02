@@ -14,6 +14,9 @@
     # enloquece. Esto disparaba el stop-turn-stutter de FINAL_APPROACH (42s, 9
     # re-alineaciones para los ultimos 1.3m). Mitigacion:
     controller:
+      # Robot quieto hasta que el gyro (mpu6050_gyro) termine su auto-bias, y
+      # recien ahi navegar (evita mover el robot durante la calibracion).
+      wait_for_gyro_calibration: true
       goal:
         # Aflojar alineacion: el re-trigger de FINAL_APPROACH es 2x este valor,
         # antes 10deg->re-align a 20deg (constantemente violado por ruido heading).
