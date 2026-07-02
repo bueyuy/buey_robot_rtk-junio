@@ -1,0 +1,5 @@
+# PlatformIO build artifacts (no versionar)
+.pio/
+.pioenvs/
+.piolibdeps/
+.vscode/

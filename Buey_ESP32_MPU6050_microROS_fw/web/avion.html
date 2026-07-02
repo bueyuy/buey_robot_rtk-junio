@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MPU6050 - Actitud 3D</title>
+<script src="https://cdn.jsdelivr.net/npm/roslib@1/build/roslib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{ --bg:#0e1116; --panel:#171c24; --border:#262d38; --txt:#d7dde6; --muted:#8a94a3;
+         --ok:#4ade80; --bad:#ff5d5d; --wait:#f5b942; --accent:#5b9bff; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;}
+  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 18px;background:var(--panel);border-bottom:1px solid var(--border);}
+  header h1{font-size:16px;margin:0;font-weight:600;}
+  .ctrl{display:flex;align-items:center;gap:6px;}
+  .rate{color:var(--muted);}
+  input{background:#0e1116;border:1px solid var(--border);color:var(--txt);border-radius:6px;padding:6px 8px;font-size:13px;}
+  input#url{width:190px;} input#topic{width:120px;}
+  button{background:#2563eb;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:13px;cursor:pointer;font-weight:500;}
+  button:hover{background:#1d4ed8;} button.off{background:#3a4150;} button.ghost{background:#3a4150;}
+  .status{display:flex;align-items:center;gap:7px;margin-left:auto;}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--bad);}
+  .dot.ok{background:var(--ok);box-shadow:0 0 8px var(--ok);} .dot.wait{background:var(--wait);}
+  main{display:grid;grid-template-columns:1fr 320px;gap:16px;padding:16px;}
+  @media(max-width:820px){main{grid-template-columns:1fr;}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+  #scene{width:100%;height:460px;display:block;}
+  .side{display:flex;flex-direction:column;gap:16px;}
+  .pad{padding:14px 16px;}
+  .read{display:flex;justify-content:space-between;align-items:baseline;padding:10px 16px;border-bottom:1px solid var(--border);}
+  .read:last-child{border-bottom:none;}
+  .read .lbl{color:var(--muted);} .read .num{font-size:26px;font-variant-numeric:tabular-nums;font-weight:600;}
+  .read .num small{font-size:13px;color:var(--muted);font-weight:400;}
+  #compass{display:block;margin:0 auto;}
+  .head-num{text-align:center;font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:4px;}
+  .head-lbl{text-align:center;color:var(--muted);margin-bottom:10px;}
+  .hint{color:var(--muted);font-size:12px;padding:0 18px 18px;line-height:1.5;}
+  code{background:#0e1116;padding:1px 6px;border-radius:4px;}
+  a{color:var(--accent);}
+</style>
+</head>
+<body>
+<header>
+  <h1>MPU6050 · Actitud 3D</h1>
+  <div class="ctrl"><label class="rate">ws</label><input id="url" value="ws://localhost:9090"></div>
+  <div class="ctrl"><label class="rate">topic</label><input id="topic" value="/mpu6050/imu/data"></div>
+  <button id="btn">Conectar</button>
+  <button id="cal" class="ghost">Calibrar (quieto)</button>
+  <button id="zero" class="ghost">Cero (yaw)</button>
+  <div class="status"><span class="dot" id="dot"></span><span id="stat">Desconectado</span><span class="rate" id="rate">0 Hz</span></div>
+</header>
+
+<main>
+  <div class="card"><canvas id="scene"></canvas></div>
+  <div class="side">
+    <div class="card pad">
+      <div class="head-lbl">RUMBO (Yaw)</div>
+      <canvas id="compass" width="220" height="220"></canvas>
+      <div class="head-num"><span id="yawN">0</span>°</div>
+    </div>
+    <div class="card">
+      <div class="read"><span class="lbl">Roll (alabeo)</span><span class="num"><span id="rollN">0</span><small>°</small></span></div>
+      <div class="read"><span class="lbl">Pitch (cabeceo)</span><span class="num"><span id="pitchN">0</span><small>°</small></span></div>
+      <div class="read"><span class="lbl">Yaw (rumbo)</span><span class="num"><span id="yawN2">0</span><small>°</small></span></div>
+    </div>
+  </div>
+</main>
+
+<p class="hint">
+  Mueve el sensor: Roll/Pitch son absolutos (acelerómetro). El Yaw se integra del giroscopio (deriva lentamente; usa <b>Cero</b> para reiniciarlo).
+  Gráficas de señal cruda en <a href="index.html">index.html</a>.
+</p>
+
+<script>
+// ===================== Three.js: escena + avión =====================
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(window.devicePixelRatio||1);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1116);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(0, 3.2, 7);
+camera.lookAt(0, 0, 0);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const dir = new THREE.DirectionalLight(0xffffff, 0.9); dir.position.set(5,8,6); scene.add(dir);
+
+// Rejilla de referencia (suelo)
+const grid = new THREE.GridHelper(12, 12, 0x39414f, 0x222833);
+grid.position.y = -1.6; scene.add(grid);
+
+// Ejes de referencia del mundo
+scene.add(new THREE.AxesHelper(2.2));
+
+// --- Avión hecho con primitivas, morro hacia -Z ---
+const plane = new THREE.Group();
+plane.rotation.order = 'YXZ';   // yaw, pitch, roll
+
+const matBody = new THREE.MeshStandardMaterial({color:0x9aa6b6, metalness:0.3, roughness:0.6});
+const matWing = new THREE.MeshStandardMaterial({color:0x5b9bff, metalness:0.2, roughness:0.6});
+const matTail = new THREE.MeshStandardMaterial({color:0xff5d5d, metalness:0.2, roughness:0.6});
+
+// Fuselaje (cilindro a lo largo de Z)
+const fus = new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.28,3.4,24), matBody);
+fus.rotation.x = Math.PI/2; plane.add(fus);
+// Morro (cono apuntando a -Z)
+const nose = new THREE.Mesh(new THREE.ConeGeometry(0.28,0.8,24), matBody);
+nose.rotation.x = -Math.PI/2; nose.position.z = -2.1; plane.add(nose);
+// Alas
+const wing = new THREE.Mesh(new THREE.BoxGeometry(4.4,0.08,0.9), matWing);
+wing.position.z = 0.1; plane.add(wing);
+// Estabilizador horizontal (cola)
+const tailH = new THREE.Mesh(new THREE.BoxGeometry(1.6,0.07,0.55), matWing);
+tailH.position.set(0,0,1.55); plane.add(tailH);
+// Estabilizador vertical (deriva)
+const tailV = new THREE.Mesh(new THREE.BoxGeometry(0.07,0.7,0.6), matTail);
+tailV.position.set(0,0.38,1.6); plane.add(tailV);
+
+scene.add(plane);
+
+function resize(){
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width!==w*renderer.getPixelRatio() || canvas.height!==h*renderer.getPixelRatio()){
+    renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix();
+  }
+}
+
+// ===================== Estimación de actitud =====================
+const D2R = Math.PI/180, R2D = 180/Math.PI;
+let roll=0, pitch=0, yaw=0;        // radianes
+let yawOffset=0;                   // para botón "Cero"
+let lastT = null;
+const ALPHA = 0.98;                // peso del giroscopio (filtro complementario)
+
+// Bias del giroscopio (rad/s) y calibración (misma logica que mpu6050_gyro.py)
+let biasX=0, biasY=0, biasZ=0;
+let calibrating=false, calData=null;
+const CAL_SAMPLES=200;             // ~10 s a 20 Hz (auto_bias_samples)
+const STATIONARY_THRESH=0.05;      // |gyro| rad/s: arriba de esto = movimiento -> reinicia la captura
+
+function startCalibration(){
+  calibrating=true; calData={n:0,sx:0,sy:0,sz:0};
+  setState('wait','Calibrando… mantén quieto');
+}
+
+function onImu(m){
+  const a = m.linear_acceleration, g = m.angular_velocity; // m/s^2, rad/s
+  const now = performance.now();
+  let dt = lastT==null ? 0 : (now-lastT)/1000; lastT = now;
+  if (dt>0.5) dt=0;  // descarta saltos
+
+  // Calibración del bias: promedia el giroscopio QUIETO. Si detecta movimiento
+  // (|gyro| > STATIONARY_THRESH) descarta lo acumulado y reinicia la captura,
+  // igual que mpu6050_gyro.py en el robot (no hornear un bias con el robot en
+  // movimiento).
+  if (calibrating){
+    const mag = Math.sqrt(g.x*g.x + g.y*g.y + g.z*g.z);
+    if (mag > STATIONARY_THRESH){
+      if (calData.n>0) setState('wait','Movimiento — reiniciando (mantén quieto)');
+      calData.n=0; calData.sx=0; calData.sy=0; calData.sz=0;
+      return;
+    }
+    calData.n++; calData.sx+=g.x; calData.sy+=g.y; calData.sz+=g.z;
+    if (calData.n>=CAL_SAMPLES){
+      biasX=calData.sx/calData.n; biasY=calData.sy/calData.n; biasZ=calData.sz/calData.n;
+      calibrating=false;
+      setState('ok','Conectado · calibrado');
+    } else {
+      setState('wait','Calibrando '+calData.n+'/'+CAL_SAMPLES+' (quieto)');
+    }
+    return; // no integrar mientras calibra
+  }
+
+  // Resta el bias medido
+  g.x-=biasX; g.y-=biasY; g.z-=biasZ;
+
+  // Roll/Pitch desde el acelerómetro (gravedad)
+  const rollAcc  = Math.atan2(a.y, a.z);
+  const pitchAcc = Math.atan2(-a.x, Math.sqrt(a.y*a.y + a.z*a.z));
+
+  // Filtro complementario: integra giro + corrige con acelerómetro
+  roll  = ALPHA*(roll  + g.x*dt) + (1-ALPHA)*rollAcc;
+  pitch = ALPHA*(pitch + g.y*dt) + (1-ALPHA)*pitchAcc;
+  // Yaw: solo integración del giroscopio (sin referencia absoluta)
+  yaw  += g.z*dt;
+
+  msgCount++;
+  updateReadouts();
+}
+
+function norm360(deg){ let d = deg % 360; if (d<0) d+=360; return d; }
+
+function updateReadouts(){
+  const yawDeg = norm360((yaw - yawOffset)*R2D);
+  document.getElementById('rollN').textContent  = (roll*R2D).toFixed(1);
+  document.getElementById('pitchN').textContent = (pitch*R2D).toFixed(1);
+  document.getElementById('yawN').textContent   = yawDeg.toFixed(0);
+  document.getElementById('yawN2').textContent  = yawDeg.toFixed(1);
+}
+
+// ===================== Brújula 2D =====================
+const cc = document.getElementById('compass'), cx = cc.getContext('2d');
+function drawCompass(){
+  const w=cc.width, h=cc.height, R=w/2-14, cxp=w/2, cyp=h/2;
+  cx.clearRect(0,0,w,h);
+  cx.strokeStyle='#39414f'; cx.lineWidth=2;
+  cx.beginPath(); cx.arc(cxp,cyp,R,0,Math.PI*2); cx.stroke();
+  cx.fillStyle='#8a94a3'; cx.font='12px system-ui'; cx.textAlign='center'; cx.textBaseline='middle';
+  for(let d=0; d<360; d+=30){
+    const a=(d-90)*D2R, r1=R, r2=R-(d%90===0?12:7);
+    cx.strokeStyle = d%90===0 ? '#5b9bff' : '#39414f';
+    cx.beginPath(); cx.moveTo(cxp+Math.cos(a)*r1,cyp+Math.sin(a)*r1); cx.lineTo(cxp+Math.cos(a)*r2,cyp+Math.sin(a)*r2); cx.stroke();
+    if(d%90===0){ cx.fillStyle='#d7dde6'; cx.fillText(d+'', cxp+Math.cos(a)*(R-26), cyp+Math.sin(a)*(R-26)); }
+  }
+  // Aguja al rumbo actual
+  const yawDeg = norm360((yaw - yawOffset)*R2D);
+  const a=(yawDeg-90)*D2R;
+  cx.strokeStyle='#ff5d5d'; cx.lineWidth=3; cx.beginPath();
+  cx.moveTo(cxp,cyp); cx.lineTo(cxp+Math.cos(a)*(R-6), cyp+Math.sin(a)*(R-6)); cx.stroke();
+  cx.fillStyle='#ff5d5d'; cx.beginPath(); cx.arc(cxp,cyp,4,0,Math.PI*2); cx.fill();
+}
+
+// ===================== Bucle de render =====================
+function loop(){
+  resize();
+  plane.rotation.set(pitch, (yaw - yawOffset), roll); // YXZ
+  renderer.render(scene, camera);
+  drawCompass();
+  requestAnimationFrame(loop);
+}
+loop();
+
+// ===================== Tasa (Hz) =====================
+let msgCount=0, lastRateT=performance.now();
+setInterval(()=>{ const n=performance.now(); document.getElementById('rate').textContent=(msgCount/((n-lastRateT)/1000)).toFixed(0)+' Hz'; msgCount=0; lastRateT=n; },1000);
+
+// ===================== Conexión ROS =====================
+let ros=null, sub=null, connected=false;
+const dot=document.getElementById('dot'), stat=document.getElementById('stat'), btn=document.getElementById('btn');
+function setState(s,t){ dot.className='dot '+s; stat.textContent=t; }
+function connect(){
+  const url=document.getElementById('url').value.trim(), topic=document.getElementById('topic').value.trim();
+  setState('wait','Conectando…'); ros=new ROSLIB.Ros({url});
+  ros.on('connection',()=>{ connected=true; setState('ok','Conectado'); btn.textContent='Desconectar'; btn.classList.add('off');
+    sub=new ROSLIB.Topic({ros,name:topic,messageType:'sensor_msgs/msg/Imu'}); sub.subscribe(onImu);
+    lastT=null; startCalibration(); });  // calibra automáticamente al conectar (mantén quieto)
+  ros.on('error',()=>setState('bad','Error de conexión'));
+  ros.on('close',()=>{ if(connected)setState('bad','Desconectado'); connected=false; btn.textContent='Conectar'; btn.classList.remove('off'); });
+}
+function disconnect(){ if(sub)sub.unsubscribe(); if(ros)ros.close(); connected=false; }
+btn.onclick=()=>{ connected?disconnect():connect(); };
+document.getElementById('zero').onclick=()=>{ yawOffset=yaw; updateReadouts(); };
+document.getElementById('cal').onclick=()=>{ if(connected) startCalibration(); };
+</script>
+</body>
+</html>
