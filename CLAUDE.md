@@ -19,7 +19,8 @@ buey_robot/
   utils/           Utilidades genericas: math, filters, gps_converter, config.
 config/            YAML como unica fuente de verdad. Cada nodo declare_parameter sin defaults.
 launch/            outdoor_rtk, indoor_zed, motor_gateway, telemetry.
-waypoints/         Archivos YAML de waypoints (locales x,y o lat/lon).
+waypoints/         Archivos YAML de waypoints x,y locales (modo waypoints_file, indoor).
+                   Los waypoints GPS (lat/lon) outdoor llegan por MQTT (bueyuy/waypoints).
 docs/              Specs y notas.
 ```
 

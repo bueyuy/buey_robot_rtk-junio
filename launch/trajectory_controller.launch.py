@@ -29,7 +29,7 @@ import os
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('buey_robot')
-    default_waypoints = os.path.join(pkg_share, 'waypoints', 'rectangulo_ABCD.yaml')
+    default_waypoints = os.path.join(pkg_share, 'waypoints', 'rectangulo_local.yaml')
 
     nav_yaml = os.path.join(pkg_share, 'config', 'navigation.yaml')
     nav_outdoor_yaml = os.path.join(pkg_share, 'config', 'navigation_outdoor.yaml')
@@ -38,18 +38,17 @@ def generate_launch_description():
     waypoints_arg = DeclareLaunchArgument(
         'waypoints_file',
         default_value=default_waypoints,
-        description='Ruta al YAML de waypoints (solo si goal_source=waypoints_file)'
+        description='Ruta al YAML de waypoints x,y locales (solo si goal_source=waypoints_file)'
     )
 
-    # navigation_outdoor.yaml fija goal_source=mqtt_positions (BASE->START). Para
-    # navegar el rectangulo ABCD (waypoints GPS lat/lon, FIJOS, origen=BASE):
-    #   ros2 launch ... trajectory_controller.launch.py goal_source:=waypoints_gps
-    # Para waypoints locales x,y relativos al arranque:
+    # navigation_outdoor.yaml fija goal_source=mqtt_waypoints: la ruta lat/lon llega
+    # por MQTT (bueyuy/waypoints) y se fija al origen BASE. Para navegar un YAML local
+    # x,y relativo al arranque:
     #   ros2 launch ... goal_source:=waypoints_file waypoints_file:=/ruta/local.yaml
     goal_source_arg = DeclareLaunchArgument(
         'goal_source',
-        default_value='mqtt_positions',
-        description='waypoints_gps (lat/lon fijos) | waypoints_file (x,y local) | mqtt_positions (BASE->START)'
+        default_value='mqtt_waypoints',
+        description='mqtt_waypoints (ruta lat/lon por MQTT, origen=BASE) | waypoints_file (x,y local)'
     )
 
     controller_node = Node(

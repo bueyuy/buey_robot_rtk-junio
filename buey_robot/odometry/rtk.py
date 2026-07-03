@@ -1,8 +1,8 @@
 """Odometria RTK: convierte /gps/fix -> /odom_filtered usando GPSConverter.
 
-Calcula heading desde movimiento GPS y lo fusiona con heading del IMU.
-Abstrae la fuente de odometria exactamente igual que odometry/zed.py,
-de modo que navigation/controller.py no sabe cual esta corriendo.
+El heading sale del nodo mpu6050_gyro (/heading/fused = gyro + COG GPS, ENU); con
+use_imu_heading=false cae al COG del GPS. Abstrae la fuente de odometria igual que
+odometry/zed.py, de modo que navigation/controller.py no sabe cual esta corriendo.
 """
 
 import rclpy
@@ -35,11 +35,7 @@ class RTKOdometry(Node):
         self.declare_parameter('gps.heading.min_movement_threshold', Parameter.Type.DOUBLE)
         self.declare_parameter('gps.heading.filter_alpha', Parameter.Type.DOUBLE)
         self.declare_parameter('gps.imu.use_imu_heading', Parameter.Type.BOOL)
-        self.declare_parameter('gps.imu.fusion_alpha', Parameter.Type.DOUBLE)
-        self.declare_parameter('gps.imu.fusion_min_speed', Parameter.Type.DOUBLE)
-        self.declare_parameter('gps.imu.magnetic_declination_deg', Parameter.Type.DOUBLE)
         self.declare_parameter('gps.imu.heading_topic', Parameter.Type.STRING)
-        self.declare_parameter('gps.imu.heading_is_enu', Parameter.Type.BOOL)
         self.declare_parameter('gps.frame_id', Parameter.Type.STRING)
 
         self.auto_set_origin = self.get_parameter('gps.origin.auto_set').value
@@ -51,11 +47,7 @@ class RTKOdometry(Node):
         self.min_movement = self.get_parameter('gps.heading.min_movement_threshold').value
         self.heading_alpha = self.get_parameter('gps.heading.filter_alpha').value
         self.use_imu_heading = self.get_parameter('gps.imu.use_imu_heading').value
-        self.fusion_alpha = self.get_parameter('gps.imu.fusion_alpha').value
-        self.fusion_min_speed = self.get_parameter('gps.imu.fusion_min_speed').value
-        self.magnetic_declination = self.get_parameter('gps.imu.magnetic_declination_deg').value
         self.imu_heading_topic = self.get_parameter('gps.imu.heading_topic').value
-        self.heading_is_enu = self.get_parameter('gps.imu.heading_is_enu').value
         self.frame_id = self.get_parameter('gps.frame_id').value
 
         # Conversor GPS y filtros
@@ -68,8 +60,6 @@ class RTKOdometry(Node):
         self.current_x = None
         self.current_y = None
         self.current_heading = None
-        self.imu_heading = None
-        self.gps_heading = None
         self.current_speed = 0.0
         self.gps_received = False
         self.imu_heading_received = False
@@ -81,24 +71,16 @@ class RTKOdometry(Node):
 
         # Subscribers
         self.create_subscription(GPSFix, '/gps/fix', self.gps_callback, 10)
-        # IMU desde micro-ROS (firmware ESP32 + LSM303DLH).
-        #
-        # CAMINO B: consumimos un heading de brujula (std_msgs/Float32, GRADOS) en
-        # vez del quaternion de /imu/data_raw (que sale vacio, cov[0]=-1).
-        #
-        # El topic es configurable (gps.imu.heading_topic). Por defecto apunta a
-        # /imu/heading_calibrated, que publica el nodo imu_compass aplicando la
-        # calibracion hard/soft-iron sobre /imu/mag (el firmware /imu/heading sale
-        # con el offset hard-iron sin corregir y barre solo ~20% de los 360).
-        #
-        # Siempre nos suscribimos: derivamos el heading ENU para telemetria
-        # (/heading/imu que consume pose.py) y, si use_imu_heading, ademas lo
-        # fusionamos con el heading GPS en _fuse_heading.
+        # Heading fusionado (gyro + COG GPS) desde el nodo mpu6050_gyro, ya en yaw
+        # ENU (std_msgs/Float32, GRADOS). El topic es configurable
+        # (gps.imu.heading_topic -> /heading/fused). Con use_imu_heading se adopta
+        # directo como current_heading; sin el, el heading sale del COG del GPS.
         self.create_subscription(Float32, self.imu_heading_topic, self.imu_callback, 10)
         if self.use_imu_heading:
-            self.get_logger().info('RTK Odometry: usando fusion heading GPS+IMU')
+            self.get_logger().info(
+                f'RTK Odometry: heading desde {self.imu_heading_topic} (gyro+GPS, ENU)')
         else:
-            self.get_logger().info('RTK Odometry: heading solo-GPS (IMU solo para telemetria)')
+            self.get_logger().info('RTK Odometry: heading solo-GPS (COG)')
 
         # BASE como origen del frame local (via MQTT, retained).
         # Cuando use_mqtt_base=true, el origen ENU lo fija la BASE publicada por
@@ -167,100 +149,29 @@ class RTKOdometry(Node):
         self._publish_odometry(msg)
 
     def imu_callback(self, msg: Float32):
-        """Callback heading IMU (Float32, grados).
-
-        Dos modos segun gps.imu.heading_is_enu:
-
-        - ENU (gyro): el heading YA viene fusionado y en yaw ENU (lo produce
-          mpu6050_gyro como /heading/fused = gyro + offset COG GPS). Se adopta
-          directo como current_heading; rtk NO re-transforma ni re-fusiona.
-
-        - Brujula (mag): el heading es absoluto en convencion brujula y se
-          convierte a yaw ENU para fusionarlo con el GPS en _fuse_heading.
-        """
-        if self.heading_is_enu:
-            self.current_heading = angle_normalize(math.radians(msg.data))
-            self.imu_heading = self.current_heading
-            self.imu_heading_received = True
+        """Heading fusionado (gyro + COG GPS) desde mpu6050_gyro (/heading/fused),
+        ya en yaw ENU. Se adopta directo como current_heading cuando use_imu_heading;
+        rtk NO re-transforma ni re-fusiona (la fusion ya la hizo mpu6050_gyro)."""
+        if not self.use_imu_heading:
             return
-        self._imu_callback_compass(msg)
-
-    def _imu_callback_compass(self, msg: Float32):
-        """Modo brujula: convierte heading de brujula a yaw ENU y fusiona con GPS.
-
-        Convierte la convencion de brujula a yaw ENU, que es el marco en que
-        trabaja todo rtk.py (igual que el heading GPS), para poder fusionarlos:
-
-          - Brujula (lo que da el firmware): 0 = Norte magnetico, sentido HORARIO.
-          - Yaw ENU (lo que usa rtk.py):     0 = Este, sentido ANTIHORARIO,
-                                             referido al Norte GEOGRAFICO.
-
-        Conversion:
-            yaw_enu = 90 - heading_brujula - declinacion_magnetica
-
-        El termino de declinacion pasa de Norte magnetico a geografico (en Uruguay
-        es negativa, ~-8.5 grados = Oeste). Ademas ABSORBE cualquier offset
-        constante por el montaje de la IMU en el robot, asi que en la practica se
-        calibra empiricamente: con el robot andando en recta, ajustar
-        magnetic_declination_deg hasta que /heading/imu coincida con /heading/gps.
-        """
-        yaw_enu = angle_normalize(
-            math.radians(90.0 - msg.data - self.magnetic_declination)
-        )
-
-        # rtk SOLO produce /odom_filtered. El heading IMU para telemetria (crudo y
-        # calibrado) lo publica imu_bridge directo a MQTT (bueyuy/imu/heading y
-        # bueyuy/imu/heading_calibrated). Aca el heading se usa unicamente para la
-        # fusion interna con el GPS cuando use_imu_heading.
-        if self.use_imu_heading:
-            self.imu_heading = yaw_enu
-            self.imu_heading_received = True
-            self._fuse_heading()
+        self.current_heading = angle_normalize(math.radians(msg.data))
+        self.imu_heading_received = True
 
     def _update_heading(self, speed: float, track: float):
-        """Actualiza heading GPS usando speed (m/s) y track/COG (grados) del GPSFix.
+        """Actualiza el heading. Con use_imu_heading lo pone imu_callback
+        (/heading/fused, ENU). Sin el, se deriva del COG del GPS.
 
-        track viene en convencion brujula (0=Norte, horario). Lo convertimos
-        a yaw ENU (0=Este, antihorario) para ser consistente con el resto del sistema.
+        track viene en convencion brujula (0=Norte, horario) -> yaw ENU (0=Este,
+        antihorario), consistente con el resto del sistema.
         """
         self.current_speed = speed
 
-        # Modo ENU: el heading viene ya fusionado por mpu6050_gyro (/heading/fused);
-        # rtk no calcula ni fusiona heading GPS aca (no pisar current_heading).
-        if self.heading_is_enu:
-            return
+        if self.use_imu_heading:
+            return  # el heading lo provee /heading/fused via imu_callback
 
         if self.current_speed > self.min_movement:
             # COG brujula -> yaw ENU: yaw = 90 - track
-            raw_gps_heading = angle_normalize(math.radians(90.0 - track))
-            self.gps_heading = raw_gps_heading  # self.heading_filter.update(...)
-            # No se publica /heading/gps: rtk solo emite /odom_filtered.
-
-        self._fuse_heading()
-
-    def _fuse_heading(self):
-        """Fusiona heading GPS+IMU con filtro complementario.
-
-        Logica:
-        - Parado o sin GPS heading: usa solo IMU.
-        - Sin IMU: usa solo GPS.
-        - En movimiento con ambos: alpha * IMU + (1-alpha) * GPS.
-        """
-        if self.imu_heading is not None and self.gps_heading is not None:
-            if self.current_speed >= self.fusion_min_speed:
-                diff = math.atan2(
-                    math.sin(self.imu_heading - self.gps_heading),
-                    math.cos(self.imu_heading - self.gps_heading)
-                )
-                self.current_heading = angle_normalize(
-                    self.gps_heading + self.fusion_alpha * diff
-                )
-            else:
-                self.current_heading = self.imu_heading
-        elif self.imu_heading is not None:
-            self.current_heading = self.imu_heading
-        elif self.gps_heading is not None:
-            self.current_heading = self.gps_heading
+            self.current_heading = angle_normalize(math.radians(90.0 - track))
 
     def _publish_odometry(self, gps_msg: GPSFix):
         """Publica nav_msgs/Odometry a /odom_filtered."""

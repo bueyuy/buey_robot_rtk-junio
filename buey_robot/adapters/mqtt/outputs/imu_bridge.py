@@ -1,17 +1,13 @@
-"""imu_bridge: republica topics ROS de IMU/heading/odom al broker MQTT.
+"""imu_bridge: republica topics ROS de heading/odom al broker MQTT.
 
-Para que el panel de telemetria (app web) pueda graficar la calibracion del
-magnetometro y comparar headings, este nodo reenvia varios topics ROS como
-JSON al broker, bajo el prefijo bueyuy/.
+Para que el panel de telemetria (app web) pueda comparar headings, este nodo
+reenvia varios topics ROS como JSON al broker, bajo el prefijo bueyuy/.
 
 Mapeo:  topic ROS  ->  bueyuy/<topic-sin-slash-inicial>
 
-  /imu/mag                -> bueyuy/imu/mag                 (MagneticField crudo: scatter)
-  /imu/heading            -> bueyuy/imu/heading             (brujula CRUDA del firmware)
-  /imu/heading_calibrated -> bueyuy/imu/heading_calibrated  (brujula CALIBRADA, nodo imu_compass)
   /heading/gyro           -> bueyuy/heading/gyro            (yaw integrado del gyro CRUDO, nodo mpu6050_gyro)
   /heading/fused          -> bueyuy/heading/fused           (gyro + offset COG GPS: absoluto ENU; el que usa rtk/odom)
-  /mpu6050/imu/data       -> bueyuy/mpu6050/imu/data        (Imu crudo MPU6050: accel+GYRO, firmware dual)
+  /mpu6050/imu/data       -> bueyuy/mpu6050/imu/data        (Imu crudo MPU6050: accel+GYRO)
   /heading/imu            -> bueyuy/heading/imu             (IMU en ENU, salida de rtk.py)
   /heading/gps            -> bueyuy/heading/gps             (GPS en ENU)
   /odom_filtered          -> bueyuy/odom_filtered           (pose + velocidad)
@@ -25,7 +21,7 @@ import json
 import rclpy
 from rclpy.node import Node
 from rosidl_runtime_py.convert import message_to_ordereddict
-from sensor_msgs.msg import MagneticField, Imu
+from sensor_msgs.msg import Imu
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float32, Float64
 
@@ -34,12 +30,9 @@ from buey_robot.utils.config import load_config, require_key
 
 # (topic ROS, tipo de mensaje, periodo minimo de publicacion en seg)
 BRIDGED = [
-    ('/imu/mag', MagneticField, 0.0),
-    ('/imu/heading', Float32, 0.0),
-    ('/imu/heading_calibrated', Float32, 0.0),
     ('/heading/gyro', Float32, 0.0),
     ('/heading/fused', Float32, 0.0),
-    ('/mpu6050/imu/data', Imu, 0.1),     # throttle a ~10 Hz: MPU6050 crudo (gyro), firmware dual
+    ('/mpu6050/imu/data', Imu, 0.1),     # throttle a ~10 Hz: MPU6050 crudo (gyro)
     ('/heading/imu', Float64, 0.0),
     ('/heading/gps', Float64, 0.0),
     ('/odom_filtered', Odometry, 0.1),   # throttle a ~10 Hz max

@@ -11,16 +11,15 @@ Este nodo consume el MPU6050 (sensor_msgs/Imu CRUDO en /mpu6050/imu/data) y:
     offset y lo suma al gyro -> /heading/fused, heading ABSOLUTO ENU sin drift
     (gyro = parte rapida de los giros; GPS = referencia absoluta lenta). Ese
     /heading/fused es EL heading que rtk.py adopta para /odom_filtered (con
-    gps.imu.heading_is_enu=true) y que llega a telemetria via pose_publisher.
+    gps.imu.use_imu_heading=true) y que llega a telemetria via pose_publisher.
 
-IMPORTANTE: el heading de gyro DERIVA. No tiene referencia absoluta como la
-brujula (mag, LSM303) o el COG del GPS: es suave y preciso a corto plazo pero
-acumula error sin cota. Aca se expone para telemetria, para comparar contra
-/imu/heading_calibrated (mag) y el heading GPS, y decidir cual fusionar.
+IMPORTANTE: el heading de gyro DERIVA. No tiene referencia absoluta: es suave y
+preciso a corto plazo pero acumula error sin cota. Por eso se fusiona con el COG
+del GPS (referencia absoluta lenta) -> /heading/fused. /heading/gyro (crudo) se
+expone aparte para telemetria/depuracion.
 
 Los topics de entrada/salida y la config (config/imu.yaml, bloque mpu6050_gyro)
-son configurables. LSM303 y MPU6050 usan firmwares distintos sobre la misma
-ESP32, asi que nunca publican /imu/data a la vez (no se reflashea nada).
+son configurables.
 """
 
 import math
@@ -28,8 +27,9 @@ import math
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
+from rclpy.qos import QoSProfile, DurabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import Imu
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Bool, Empty
 from gps_msgs.msg import GPSFix
 
 
@@ -51,6 +51,17 @@ class Mpu6050Gyro(Node):
         self.declare_parameter('auto_bias_enabled', Parameter.Type.BOOL)
         self.declare_parameter('auto_bias_samples', Parameter.Type.INTEGER)
         self.declare_parameter('stationary_thresh', Parameter.Type.DOUBLE)
+        # Topic para disparar una recalibracion on-demand (std_msgs/Empty). Lo usa el
+        # controller para recalibrar el bias al arrancar la navegacion (robot recien
+        # parado y quieto en el inicio), en vez de depender de la calibracion que se
+        # hizo al levantar outdoor_rtk.
+        self.declare_parameter('calibrate_topic', Parameter.Type.STRING)
+        # Deteccion de gyro muerto/congelado: un MPU6050 vivo siempre tiene ruido
+        # (std del wz en reposo > 0); un topic equivocado (LSM303, sin gyro) o un
+        # gyro que no reporta da wz == 0.0 exacto (std ~ 0). Si el spread queda por
+        # debajo de esto, NO se completa el auto-bias (no publica /heading/gyro) ->
+        # el controller queda bloqueado en vez de navegar con heading muerto.
+        self.declare_parameter('gyro_alive_min_std', Parameter.Type.DOUBLE)
         self.declare_parameter('heading_initial_deg', Parameter.Type.DOUBLE)
         self.declare_parameter('heading_invert', Parameter.Type.BOOL)
         # Fusion con COG del GPS (heading absoluto sin drift)
@@ -62,6 +73,13 @@ class Mpu6050Gyro(Node):
         self.declare_parameter('offset_alpha', Parameter.Type.DOUBLE)
         self.declare_parameter('offset_init_samples', Parameter.Type.INTEGER)
         self.declare_parameter('straight_max_yaw_rate', Parameter.Type.DOUBLE)
+        # Convergencia del offset: cuando el residual (target-offset) por fix se
+        # mantiene chico varias muestras seguidas, el heading fused esta alineado.
+        # Se publica /heading/fused_ready (Bool latched) -> el controller lo espera
+        # antes de terminar el creep de pre-alineacion y soltar la navegacion.
+        self.declare_parameter('fused_ready_topic', Parameter.Type.STRING)
+        self.declare_parameter('converge_tol_deg', Parameter.Type.DOUBLE)
+        self.declare_parameter('converge_min_samples', Parameter.Type.INTEGER)
 
         self.imu_topic = self.get_parameter('imu_topic').value
         self.data_cal_topic = self.get_parameter('data_calibrated_topic').value
@@ -73,6 +91,8 @@ class Mpu6050Gyro(Node):
         self.auto_bias = self.get_parameter('auto_bias_enabled').value
         self.auto_samples = self.get_parameter('auto_bias_samples').value
         self.stationary_thresh = self.get_parameter('stationary_thresh').value
+        self.gyro_alive_min_std = self.get_parameter('gyro_alive_min_std').value
+        self.calibrate_topic = self.get_parameter('calibrate_topic').value
         self.heading_deg = self.get_parameter('heading_initial_deg').value
         self.heading_invert = self.get_parameter('heading_invert').value
         self.gps_fusion = self.get_parameter('gps_fusion_enabled').value
@@ -83,6 +103,9 @@ class Mpu6050Gyro(Node):
         self.offset_alpha = self.get_parameter('offset_alpha').value
         self.init_samples = self.get_parameter('offset_init_samples').value
         self.straight_max_yaw_rate = self.get_parameter('straight_max_yaw_rate').value
+        self.fused_ready_topic = self.get_parameter('fused_ready_topic').value
+        self.converge_tol_deg = self.get_parameter('converge_tol_deg').value
+        self.converge_min_samples = self.get_parameter('converge_min_samples').value
 
         # Estado de integracion
         self._last_time = None  # seg (reloj del nodo)
@@ -90,6 +113,7 @@ class Mpu6050Gyro(Node):
         # Estado de auto-calibracion de bias en reposo
         self._calibrating = self.auto_bias
         self._acc = [0.0, 0.0, 0.0]
+        self._acc_sq_z = 0.0  # suma de wz^2 -> std del yaw rate (deteccion gyro muerto)
         self._n = 0
 
         # Estado de fusion con GPS: offset (grados) que lleva el gyro al frame
@@ -99,13 +123,26 @@ class Mpu6050Gyro(Node):
         self._init_sin = 0.0  # acumuladores media circular del warm-up
         self._init_cos = 0.0
         self._init_n = 0
+        # Convergencia del offset: fixes rectos consecutivos con residual chico.
+        self._converge_count = 0
+        self._fused_ready = False
+
+        self._heading_initial = self.heading_deg  # para reiniciar en recalibraciones
 
         self.heading_pub = self.create_publisher(Float32, self.heading_topic, 10)
         self.data_pub = self.create_publisher(Imu, self.data_cal_topic, 10)
         self.create_subscription(Imu, self.imu_topic, self._imu_callback, 10)
+        # Recalibracion on-demand (el controller la dispara al arrancar la nav)
+        self.create_subscription(Empty, self.calibrate_topic, self._calibrate_cb, 10)
 
         if self.gps_fusion:
             self.fused_pub = self.create_publisher(Float32, self.fused_topic, 10)
+            # Latched (transient_local): un subscriber tardio (el controller) recibe
+            # el ultimo estado aunque la convergencia haya ocurrido antes de arrancar.
+            latched = QoSProfile(depth=1, history=HistoryPolicy.KEEP_LAST,
+                                 durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            self.fused_ready_pub = self.create_publisher(Bool, self.fused_ready_topic, latched)
+            self.fused_ready_pub.publish(Bool(data=False))  # estado inicial: no convergido
             self.create_subscription(GPSFix, self.gps_fix_topic, self._gps_callback, 10)
 
         self.get_logger().info(
@@ -115,11 +152,15 @@ class Mpu6050Gyro(Node):
                 f'  fusion GPS: ON, {self.gps_fix_topic} -> {self.fused_topic} '
                 f'(min_speed={self.gps_min_speed}, require_rtk={self.gps_require_rtk}, '
                 f'alpha={self.offset_alpha})')
+            self.get_logger().info(
+                f'  convergencia: {self.fused_ready_topic} cuando |residual|<'
+                f'{self.converge_tol_deg:.0f} deg x{self.converge_min_samples} fixes rectos')
         if self._calibrating:
             self.get_logger().info(
                 f'  auto-bias: ON (mantener el robot QUIETO, {self.auto_samples} muestras)')
         else:
             self.get_logger().info(f'  auto-bias: OFF, usando gyro_bias={self.bias}')
+        self.get_logger().info(f'  recalibracion on-demand: {self.calibrate_topic}')
 
     def _imu_callback(self, msg: Imu):
         wx = msg.angular_velocity.x
@@ -197,9 +238,58 @@ class Mpu6050Gyro(Node):
         else:
             err = _wrap180(target - self._gps_offset)
             self._gps_offset = _wrap180(self._gps_offset + self.offset_alpha * err)
+            self._track_convergence(err)
+
+    def _track_convergence(self, err):
+        """Marca el heading fused como convergido tras N fixes rectos con residual
+        chico. Publica /heading/fused_ready=true (latched) una sola vez -> el
+        controller lo espera antes de terminar la pre-alineacion y navegar."""
+        if abs(err) <= self.converge_tol_deg:
+            self._converge_count += 1
+        else:
+            self._converge_count = 0
+        if not self._fused_ready and self._converge_count >= self.converge_min_samples:
+            self._fused_ready = True
+            self.fused_ready_pub.publish(Bool(data=True))
+            self.get_logger().info(
+                f'fusion GPS: heading fused CONVERGIDO '
+                f'(|residual|<{self.converge_tol_deg:.0f} deg x{self.converge_min_samples} fixes) '
+                f'-> {self.fused_ready_topic}=true')
+
+    def _calibrate_cb(self, msg: Empty):
+        """Recalibracion on-demand: reinicia el auto-bias y el estado de fusion para
+        una corrida fresca (robot recien parado y quieto). Mientras recalibra, deja
+        de publicar /heading/gyro (el _imu_callback vuelve en _collect_bias) -> el
+        controller lo detecta como 'no calibrado' hasta que reaparece.
+        """
+        self.get_logger().info('Recalibracion solicitada — reiniciando auto-bias y fusion GPS')
+        # Reiniciar auto-bias
+        self._calibrating = True
+        self._acc = [0.0, 0.0, 0.0]
+        self._acc_sq_z = 0.0
+        self._n = 0
+        self._last_time = None
+        # Reiniciar integracion de heading y fusion (arranque limpio)
+        self.heading_deg = self._heading_initial
+        self._gps_offset = None
+        self._init_sin = 0.0
+        self._init_cos = 0.0
+        self._init_n = 0
+        self._converge_count = 0
+        # Bajar la senial de convergencia: el creep de pre-alineacion debe reesperarla
+        if self.gps_fusion and self._fused_ready:
+            self._fused_ready = False
+            self.fused_ready_pub.publish(Bool(data=False))
 
     def _collect_bias(self, wx, wy, wz):
-        """Promedia el gyro con el robot quieto para estimar el bias."""
+        """Promedia el gyro con el robot quieto para estimar el bias.
+
+        Ademas valida que el gyro este VIVO: mide el std del yaw rate en la ventana
+        de captura. Un gyro real en reposo tiene ruido (std > 0); un topic equivocado
+        (LSM303, sin gyro) o un gyro que no reporta da wz==0.0 exacto (std ~ 0). Si el
+        gyro no da señal, NO se completa el auto-bias -> no se publica /heading/gyro
+        -> el controller queda bloqueado en vez de navegar con heading muerto.
+        """
         mag = math.sqrt(wx * wx + wy * wy + wz * wz)
         if mag > self.stationary_thresh:
             # Se movio: descartar lo acumulado y reintentar desde cero
@@ -208,20 +298,37 @@ class Mpu6050Gyro(Node):
                     'movimiento durante auto-bias: reiniciando captura (mantener quieto)',
                     throttle_duration_sec=2.0)
             self._acc = [0.0, 0.0, 0.0]
+            self._acc_sq_z = 0.0
             self._n = 0
             return
 
         self._acc[0] += wx
         self._acc[1] += wy
         self._acc[2] += wz
+        self._acc_sq_z += wz * wz
         self._n += 1
 
         if self._n >= self.auto_samples:
+            mean_z = self._acc[2] / self._n
+            var_z = max(0.0, self._acc_sq_z / self._n - mean_z * mean_z)
+            std_z = math.sqrt(var_z)
+            if std_z < self.gyro_alive_min_std:
+                # Gyro muerto/congelado (std ~ 0): no completar. Reintentar y avisar
+                # fuerte; /heading/gyro NO se publica -> el gate del controller bloquea.
+                self.get_logger().error(
+                    f'GYRO SIN SEÑAL: std yaw rate={std_z:.2e} < {self.gyro_alive_min_std:.2e} rad/s. '
+                    f'El gyro no reporta (revisar {self.imu_topic}: firmware dual / topic / cableado). '
+                    f'NO se habilita el heading — robot bloqueado.',
+                    throttle_duration_sec=5.0)
+                self._acc = [0.0, 0.0, 0.0]
+                self._acc_sq_z = 0.0
+                self._n = 0
+                return
             self.bias = [a / self._n for a in self._acc]
             self._calibrating = False
             self._last_time = None
             self.get_logger().info(
-                f'auto-bias OK (n={self._n}): gyro_bias='
+                f'auto-bias OK (n={self._n}, std_z={std_z:.2e} rad/s): gyro_bias='
                 f'[{self.bias[0]:.5f}, {self.bias[1]:.5f}, {self.bias[2]:.5f}] rad/s')
 
     def _publish_calibrated(self, msg: Imu):

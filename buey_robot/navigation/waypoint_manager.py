@@ -69,6 +69,10 @@ class WaypointManager:
         """Avanza al siguiente waypoint."""
         self._index += 1
 
+    def restart(self):
+        """Vuelve al primer waypoint (para recorrer la ruta en loop)."""
+        self._index = 0
+
     def current_goal(self) -> tuple:
         """Retorna (x, y) del waypoint actual, o None si se completaron todos."""
         if self._index >= len(self._waypoints):
