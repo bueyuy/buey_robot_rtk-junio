@@ -20,6 +20,7 @@ from std_msgs.msg import String, Float32, Bool, Empty
 
 from buey_robot.adapters.mqtt.client import get_client
 from buey_robot.adapters.mqtt.inputs.positions import MqttPositionsInput
+from buey_robot.adapters.mqtt.inputs.start import MqttStartInput
 from buey_robot.adapters.mqtt.inputs.waypoints import MqttWaypointsInput
 from buey_robot.adapters.mqtt.outputs.config import MqttConfigOutput
 from buey_robot.adapters.mqtt.outputs.status import MqttStatusOutput
@@ -155,6 +156,10 @@ class TrajectoryController(Node, ArcStateMixin):
         self._pending_waypoints_gps = None
         # Recorrer la ruta en bucle (lo setea _on_waypoints desde el flag MQTT "loop").
         self._loop = False
+        # Ruta cargada (waypoints seteados) pero AUN NO arrancada: espera el GO
+        # (bueyuy/navigation/start). Separar carga de arranque evita que una ruta
+        # retenida haga mover el robot solo, y permite revisar la ruta en el mapa.
+        self._route_loaded = False
 
         # Modo mqtt_waypoints: la ruta llega como lat/lon por MQTT (bueyuy/waypoints)
         # y se fija al origen BASE (fija, mismo frame que rtk.py) -> los waypoints no
@@ -170,6 +175,11 @@ class TrajectoryController(Node, ArcStateMixin):
             self._waypoints_input = MqttWaypointsInput(
                 self._mqtt, on_waypoints=self._on_waypoints,
                 topic=require_key(mqtt_cfg, 'topics', 'waypoints'))
+            # Disparador de arranque (GO): el dashboard lo publica cuando el robot
+            # esta en el inicio. Recien ahi arranca la ruta cargada.
+            self._start_input = MqttStartInput(
+                self._mqtt, on_start=self._on_nav_start,
+                topic=require_key(mqtt_cfg, 'topics', 'nav_start'))
 
         # Estado
         self.current_x = self.current_y = self.current_heading = None
@@ -353,13 +363,19 @@ class TrajectoryController(Node, ArcStateMixin):
             self._on_waypoints(pending_wps, pending_loop)
 
     def _on_waypoints(self, waypoints_gps: list, loop: bool = False):
-        """Ruta de waypoints GPS via MQTT (bueyuy/waypoints). Convierte cada
-        {lat,lon} a x/y con el origen BASE (mismo frame que /odom_filtered) y
-        arranca la trayectoria.
+        """CARGA una ruta de waypoints GPS via MQTT (bueyuy/waypoints), pero NO
+        arranca: deja la ruta lista y espera el GO (bueyuy/navigation/start).
 
-        loop=true: recorre la ruta en bucle (al completar el ultimo waypoint vuelve
-        al primero, ver control_loop). Si el origen aun no esta (falta BASE), guarda
-        la ruta (con el flag loop) y la carga cuando llegue la BASE (ver _on_base)."""
+        Convierte cada {lat,lon} a x/y con el origen BASE (mismo frame que
+        /odom_filtered) y la publica al mapa. loop=true: al completar el ultimo
+        waypoint vuelve al primero (ver control_loop). Si el origen aun no esta
+        (falta BASE), guarda la ruta y la carga al llegar la BASE (ver _on_base).
+
+        Lista vacia (waypoints_gps: []) = comando LIMPIAR/idle: frena y descarta."""
+        if not waypoints_gps:
+            self._clear_route()
+            return
+
         if not self._gps_converter.origin_set:
             self._pending_waypoints_gps = (waypoints_gps, loop)
             self.get_logger().warn(
@@ -375,16 +391,59 @@ class TrajectoryController(Node, ArcStateMixin):
 
         self.wp_manager.set_waypoints(local)
         self._loop = loop
-        self.trajectory_active = True
+        self._route_loaded = True
+        self.trajectory_active = False   # NO arrancar: esperar el GO
         self.aligning = False
         self.auto_load_attempted = True
 
         self.get_logger().info(
-            f'Waypoints MQTT: cargados {len(local)} waypoints (origen=BASE, loop={loop})')
+            f'Ruta cargada: {len(local)} waypoints (origen=BASE, loop={loop}) — '
+            f'esperando GO (bueyuy/navigation/start)')
         for i, (wx, wy) in enumerate(local):
             self.get_logger().info(f'  WP{i}: x={wx:.2f}, y={wy:.2f}')
 
         self.waypoints_output.send_xy(self.wp_manager.waypoints)
+        self._publish_status(f'Ruta cargada ({len(local)} wps) — esperando GO')
+
+    def _clear_route(self):
+        """Comando limpiar/idle (waypoints_gps: []): frena y descarta la ruta.
+        El robot no vuelve a moverse hasta cargar otra ruta + GO. Es el 'Detener'
+        del dashboard."""
+        self._route_loaded = False
+        self.trajectory_active = False
+        self._loop = False
+        self._pending_waypoints_gps = None
+        self._publish_stop()
+        self.waypoints_output.send_xy([])   # limpiar la ruta del mapa
+        self.get_logger().info('Ruta limpiada (waypoints vacio) — idle')
+        self._publish_status('Idle (sin ruta)')
+
+    def _on_nav_start(self):
+        """GO (bueyuy/navigation/start): arranca la ruta ya cargada desde el primer
+        waypoint. Ignorado si no hay ruta cargada. Es la confirmacion del operador
+        (robot en el inicio) para soltar la navegacion."""
+        if not self._route_loaded:
+            self.get_logger().warn('GO recibido pero no hay ruta cargada — ignorado')
+            self._publish_status('GO sin ruta cargada')
+            return
+
+        # Re-hacer la secuencia de arranque en CADA GO: recalibrar el gyro
+        # (bias + offset) y re-correr el creep antes de navegar. Sin esto, el heading
+        # fused viejo puede estar corrompido (p.ej. tras alinear con joystick /
+        # marcha atras: el COG apunta hacia atras y desvia el offset) y el robot
+        # gira al reves en el primer waypoint. La recalibracion re-snapea el offset
+        # desde el COG yendo derecho durante el creep.
+        self._prealign_done = False
+        self._prealign_start = None
+        self._fused_converged = not self.prealign_require_converge
+        if self.trigger_gyro_cal:
+            self._send_gyro_calibrate()   # resetea bias+offset; robot quieto hasta recalibrar
+
+        self.wp_manager.restart()        # arrancar/re-correr desde WP0
+        self.trajectory_active = True
+        self.aligning = False
+        self.get_logger().info('GO recibido — recalibrando gyro + creep antes de navegar la ruta')
+        self._publish_status('GO — recalibrando + alineando')
 
     def control_loop(self):
         if self.current_x is None or self.current_y is None:

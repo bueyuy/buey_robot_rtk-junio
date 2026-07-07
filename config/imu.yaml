@@ -45,6 +45,10 @@ mpu6050_gyro:
     gps_fusion_enabled: true
     gps_fix_topic: "/gps/fix"
     fused_heading_topic: "/heading/fused"
+    # Gyro alineado al COG en convencion brujula (0=Norte, horario) = (90 - fused).
+    # Es la flecha del gyro para el dashboard: yendo derecho coincide con el COG,
+    # no queda defasada como /heading/gyro crudo (ENU, cero arbitrario).
+    gyro_compass_topic: "/heading/gyro_compass"
     # m/s: COG confiable solo por encima de esto. Probado 2026-07-01: el robot
     # crucero a ~0.25-0.29 nunca cruzo 0.30 -> el offset no inicializo y odomYaw
     # quedo en 0 toda la corrida. 0.20 entra en rectas lentas y sigue excluyendo

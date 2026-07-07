@@ -68,6 +68,10 @@ class Mpu6050Gyro(Node):
         self.declare_parameter('gps_fusion_enabled', Parameter.Type.BOOL)
         self.declare_parameter('gps_fix_topic', Parameter.Type.STRING)
         self.declare_parameter('fused_heading_topic', Parameter.Type.STRING)
+        # Gyro alineado al COG, en convencion BRUJULA (0=Norte, horario): = (90-fused).
+        # Yendo derecho coincide con el COG del GPS -> la flecha del dashboard queda
+        # alineada, no defasada como el /heading/gyro crudo (ENU, cero arbitrario).
+        self.declare_parameter('gyro_compass_topic', Parameter.Type.STRING)
         self.declare_parameter('gps_min_speed', Parameter.Type.DOUBLE)
         self.declare_parameter('gps_require_rtk', Parameter.Type.BOOL)
         self.declare_parameter('offset_alpha', Parameter.Type.DOUBLE)
@@ -98,6 +102,7 @@ class Mpu6050Gyro(Node):
         self.gps_fusion = self.get_parameter('gps_fusion_enabled').value
         self.gps_fix_topic = self.get_parameter('gps_fix_topic').value
         self.fused_topic = self.get_parameter('fused_heading_topic').value
+        self.gyro_compass_topic = self.get_parameter('gyro_compass_topic').value
         self.gps_min_speed = self.get_parameter('gps_min_speed').value
         self.gps_require_rtk = self.get_parameter('gps_require_rtk').value
         self.offset_alpha = self.get_parameter('offset_alpha').value
@@ -137,6 +142,8 @@ class Mpu6050Gyro(Node):
 
         if self.gps_fusion:
             self.fused_pub = self.create_publisher(Float32, self.fused_topic, 10)
+            # Gyro alineado al COG en convencion brujula (para la flecha del dashboard)
+            self.gyro_compass_pub = self.create_publisher(Float32, self.gyro_compass_topic, 10)
             # Latched (transient_local): un subscriber tardio (el controller) recibe
             # el ultimo estado aunque la convergencia haya ocurrido antes de arrancar.
             latched = QoSProfile(depth=1, history=HistoryPolicy.KEEP_LAST,
@@ -155,6 +162,8 @@ class Mpu6050Gyro(Node):
             self.get_logger().info(
                 f'  convergencia: {self.fused_ready_topic} cuando |residual|<'
                 f'{self.converge_tol_deg:.0f} deg x{self.converge_min_samples} fixes rectos')
+            self.get_logger().info(
+                f'  gyro alineado (brujula): {self.gyro_compass_topic} = (90 - fused)')
         if self._calibrating:
             self.get_logger().info(
                 f'  auto-bias: ON (mantener el robot QUIETO, {self.auto_samples} muestras)')
@@ -195,6 +204,10 @@ class Mpu6050Gyro(Node):
         if self.gps_fusion and self._gps_offset is not None:
             fused = (self.heading_deg + self._gps_offset) % 360.0
             self.fused_pub.publish(Float32(data=float(fused)))
+            # Mismo heading en convencion BRUJULA (0=Norte, horario), alineado al COG:
+            # (90 - fused). Yendo derecho == COG del GPS -> la flecha no queda defasada.
+            gyro_compass = (90.0 - fused) % 360.0
+            self.gyro_compass_pub.publish(Float32(data=float(gyro_compass)))
 
         self._publish_calibrated(msg)
 

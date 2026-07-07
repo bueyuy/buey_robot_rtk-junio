@@ -13,8 +13,8 @@
       frequency_hz: 10.0
       mode: "no-arc"
       goal:
-        position_tolerance_m: 0.50
-        alignment_tolerance_deg: 10.0
+        position_tolerance_m: 0.5
+        alignment_tolerance_deg: 5.0
       velocity:
         cruise_linear_m_s: 0.3
         min_linear_m_s: 0.15
