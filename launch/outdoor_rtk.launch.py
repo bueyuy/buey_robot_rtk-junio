@@ -33,7 +33,6 @@ def generate_launch_description():
     pkg_share = get_package_share_directory('buey_robot')
 
     nav_yaml = os.path.join(pkg_share, 'config', 'navigation.yaml')
-    nav_outdoor_yaml = os.path.join(pkg_share, 'config', 'navigation_outdoor.yaml')
     sensors_yaml = os.path.join(pkg_share, 'config', 'sensors.yaml')
     imu_yaml = os.path.join(pkg_share, 'config', 'imu.yaml')
 
@@ -82,7 +81,6 @@ def generate_launch_description():
         parameters=[
             sensors_yaml,
             nav_yaml,
-            nav_outdoor_yaml,
         ],
     )
 

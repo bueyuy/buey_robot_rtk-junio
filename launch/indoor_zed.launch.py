@@ -32,8 +32,10 @@ def generate_launch_description():
 
     default_waypoints = os.path.join(pkg_share, 'waypoints', 'rectangulo_local.yaml')
 
+    # OJO: navigation.yaml esta tuneado para OUTDOOR (RTK). Para indoor (ZED) hay
+    # que bajar wait_for_gyro_calibration/trigger_gyro_calibration a false (ZED no
+    # tiene gyro) y goal_source a waypoints_file. Ver navigation.yaml.
     nav_yaml = os.path.join(pkg_share, 'config', 'navigation.yaml')
-    nav_indoor_yaml = os.path.join(pkg_share, 'config', 'navigation_indoor.yaml')
     motor_yaml = os.path.join(pkg_share, 'config', 'motor.yaml')
     sensors_yaml = os.path.join(pkg_share, 'config', 'sensors.yaml')
 
@@ -60,7 +62,6 @@ def generate_launch_description():
         parameters=[
             sensors_yaml,
             nav_yaml,
-            nav_indoor_yaml,
         ],
     )
 
@@ -72,7 +73,6 @@ def generate_launch_description():
         output='screen',
         parameters=[
             nav_yaml,
-            nav_indoor_yaml,
             motor_yaml,
             {'auto_load_waypoints': LaunchConfiguration('waypoints_file')},
         ]
