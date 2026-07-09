@@ -45,3 +45,7 @@ topics:
   # Puntos de referencia (retained, los publica el dashboard)
   positions_base: "bueyuy/positions/base"
   positions_start: "bueyuy/positions/start"
+
+  # Centro del robot en lat/lon (rtk.py, ya con lever-arm de antena) para el mapa:
+  # esquinas limpias en los giros, sin las "narices" de la antena cruda (rtk/location).
+  position_robot: "bueyuy/position/robot"

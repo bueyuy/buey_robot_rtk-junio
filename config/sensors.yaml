@@ -11,12 +11,19 @@
       require_rtk_fix: true
       frame_id: "gps_link"
 
+      # Lever-arm de la antena rover: montada offset_x_m ADELANTE del centro del
+      # robot (en la trompa). rtk.py traslada la posicion GPS al centro restando
+      # este offset en la direccion del heading (igual que camera.offset_x_m en
+      # zed.py). Positivo = adelante; 0 = antena ya en el centro.
+      antenna:
+        offset_x_m: 0.40
+
       # Odometry RTK: auto-establece primer fix como origen
       origin:
         auto_set: true
         # Si true, el origen ENU lo fija la BASE de MQTT (bueyuy/positions/base) en vez
         # del primer fix; rtk.py espera la BASE antes de producir /odom_filtered.
-        # navigation_outdoor.yaml lo activa para navegar BASE->START.
+        # navigation.yaml lo pone en true (gps.origin.use_mqtt_base) para outdoor.
         use_mqtt_base: false
 
       # Odometry RTK: calidad minima para navegar
