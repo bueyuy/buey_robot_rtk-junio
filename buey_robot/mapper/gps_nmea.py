@@ -5,16 +5,21 @@ El transport es invisible para este nodo — si manana el GPS llega por
 otro medio, se instancia otro adapter con la misma firma.
 """
 
+import math
+
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from gps_msgs.msg import GPSFix, GPSStatus
-from std_msgs.msg import String
+from std_msgs.msg import String, Float32
 
 from buey_robot.adapters.mqtt.client import get_client
 from buey_robot.adapters.mqtt.outputs.gps import MqttGpsOutput
 from buey_robot.adapters.serial.inputs.nmea import SerialNmeaInput
 from buey_robot.utils.config import load_config
+
+# Metros por grado de latitud (equirectangular local; para el lever-arm de antena).
+_M_PER_DEG = 111320.0
 
 
 class GPSNmeaDriver(Node):
@@ -28,6 +33,12 @@ class GPSNmeaDriver(Node):
         self.declare_parameter('gps.min_satellites', Parameter.Type.INTEGER)
         self.declare_parameter('gps.require_rtk_fix', Parameter.Type.BOOL)
         self.declare_parameter('gps.frame_id', Parameter.Type.STRING)
+        # Lever-arm: la antena esta offset_x_m ADELANTE del centro del robot (trompa).
+        # El driver traslada la posicion al CENTRO acá (con el heading), asi TODO aguas
+        # abajo (/gps/fix, rtk/location/json, /odom_filtered) usa una UNICA ubicacion
+        # ya con offset -> no hay una cruda y una corregida. Vive en robot.yaml
+        # (propiedad fisica de montaje del robot).
+        self.declare_parameter('robot.antenna.offset_x_m', Parameter.Type.DOUBLE)
 
         port = self.get_parameter('gps.serial.port').value
         baud = self.get_parameter('gps.serial.baudrate').value
@@ -35,10 +46,16 @@ class GPSNmeaDriver(Node):
         self._min_satellites = self.get_parameter('gps.min_satellites').value
         self._require_rtk = self.get_parameter('gps.require_rtk_fix').value
         self._frame_id = self.get_parameter('gps.frame_id').value
+        self._antenna_offset = self.get_parameter('robot.antenna.offset_x_m').value
+
+        # Heading (yaw ENU, grados) para orientar el lever-arm. Lo publica mpu6050_gyro
+        # (/heading/fused). None hasta el primer heading -> mientras, posicion sin offset.
+        self._heading_rad = None
 
         # Publisher ROS2
         self._gps_pub = self.create_publisher(GPSFix, '/gps/fix', 10)
         self._status_pub = self.create_publisher(String, '/gps/status', 10)
+        self.create_subscription(Float32, '/heading/fused', self._on_heading, 10)
 
         # Contadores
         self._messages_published = 0
@@ -48,7 +65,7 @@ class GPSNmeaDriver(Node):
         mqtt_cfg = load_config('mqtt.yaml')
         self._mqtt = get_client(mqtt_cfg, logger=self.get_logger())
 
-        # Output MQTT (solo activo en outdoor_rtk launch)
+        # Output MQTT: rtk/location/json (posicion centro + calidad)
         self._gps_output = MqttGpsOutput(self._mqtt, mqtt_cfg)
 
         # Adapter de adquisicion: lee serial, parsea NMEA, llama _on_fix
@@ -67,8 +84,24 @@ class GPSNmeaDriver(Node):
     # Callback del adapter
     # ------------------------------------------------------------------
 
+    def _on_heading(self, msg: Float32):
+        self._heading_rad = math.radians(msg.data)
+
+    def _center(self, lat, lon):
+        """Traslada la posicion de la ANTENA al CENTRO del robot (lever-arm). La antena
+        esta offset ADELANTE (eje X del cuerpo), asi que el centro queda offset atras en
+        la direccion del heading. Sin heading todavia (o sin lat/lon), devuelve crudo."""
+        if lat is None or lon is None or self._antenna_offset == 0.0 or self._heading_rad is None:
+            return lat, lon
+        h = self._heading_rad
+        d_east = -self._antenna_offset * math.cos(h)   # metros
+        d_north = -self._antenna_offset * math.sin(h)
+        clat = lat + d_north / _M_PER_DEG
+        clon = lon + d_east / (_M_PER_DEG * math.cos(math.radians(lat)))
+        return clat, clon
+
     def _on_fix(self, data: dict):
-        """Recibe un fix GPS del adapter y publica /gps/fix.
+        """Recibe un fix GPS del adapter y publica /gps/fix (ya con offset de antena).
 
         data contiene: lat, lon, alt, quality, satellites, hdop, speed_knots, cog
         """
@@ -82,9 +115,13 @@ class GPSNmeaDriver(Node):
             self.get_logger().info(f'GPS calidad: {old} -> {new} (sats={data["satellites"]})')
             self._last_quality = data['quality']
 
-        # MQTT: enviar cada fix que llega del hardware
+        # UNICA ubicacion del robot: trasladar la antena al centro (lever-arm). Se usa
+        # tanto para rtk/location/json (mapa) como para /gps/fix (odometria/nav).
+        clat, clon = self._center(data['lat'], data['lon'])
+
+        # MQTT: enviar cada fix que llega del hardware (centro, sin filtros de calidad)
         self._gps_output.send(
-            data['lat'], data['lon'],
+            clat, clon,
             data['alt'], data['quality'], data['satellites'],
             data.get('hdop', 99.9),
             cog=data.get('cog'),
@@ -127,9 +164,9 @@ class GPSNmeaDriver(Node):
         else:
             gps_msg.status.status = GPSStatus.STATUS_NO_FIX
 
-        # Posicion
-        gps_msg.latitude = data['lat']
-        gps_msg.longitude = data['lon']
+        # Posicion (centro del robot, ya con lever-arm de antena)
+        gps_msg.latitude = clat
+        gps_msg.longitude = clon
         gps_msg.altitude = data['alt']
 
         # Velocidad (nudos -> m/s) y curso
@@ -141,14 +178,16 @@ class GPSNmeaDriver(Node):
         # DOP
         gps_msg.hdop = data.get('hdop', 99.9)
 
-        # Covarianza de posicion
-        if quality >= 4:
+        # Covarianza de posicion (accuracy horizontal, m). OJO: q4=RTK Fixed (cm) y
+        # q5=RTK Float (decimetro) son DISTINTOS -> hay que testear q==4 antes que
+        # >=4, si no el Float hereda la accuracy del Fixed (bug: q5 nunca entraba).
+        if quality == 4:        # RTK Fixed
             accuracy = 0.02
-        elif quality == 5:
+        elif quality == 5:      # RTK Float
             accuracy = 0.05
-        elif quality >= 2:
+        elif quality >= 2:      # DGPS
             accuracy = 0.5
-        elif quality >= 1:
+        elif quality >= 1:      # GPS single
             accuracy = min(data['hdop'] * 5.0, 10.0)
         else:
             accuracy = 10.0

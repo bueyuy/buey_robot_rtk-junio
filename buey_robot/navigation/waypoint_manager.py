@@ -1,6 +1,8 @@
-"""Gestion de waypoints: carga, validacion, offset, avance."""
+"""Gestion de waypoints: carga (via set_waypoints), avance, loop.
 
-import yaml
+Los waypoints llegan SIEMPRE por MQTT (bueyuy/waypoints), ya convertidos a x,y
+locales por el controller. No se cargan de archivos YAML.
+"""
 
 
 class WaypointManager:
@@ -9,43 +11,6 @@ class WaypointManager:
     def __init__(self):
         self._waypoints = []
         self._index = 0
-
-    def load_from_file(self, filepath: str, origin_x: float, origin_y: float) -> list:
-        """Carga waypoints desde un archivo YAML.
-
-        Los waypoints del YAML son relativos al punto de arranque del robot.
-        Se suma origin_x/origin_y como offset.
-
-        Crash si el archivo es invalido o no contiene waypoints.
-
-        Args:
-            filepath: Ruta al archivo YAML.
-            origin_x: Posicion X actual del robot (offset).
-            origin_y: Posicion Y actual del robot (offset).
-
-        Returns:
-            Lista de tuplas (x, y) con waypoints cargados.
-        """
-        with open(filepath, 'r') as f:
-            data = yaml.safe_load(f)
-
-        if not data or 'waypoints' not in data:
-            raise ValueError(f"YAML '{filepath}' no contiene campo 'waypoints'")
-
-        self._waypoints = []
-        for wp in data['waypoints']:
-            if 'x' not in wp or 'y' not in wp:
-                raise ValueError(f"Waypoint invalido (falta x o y): {wp}")
-            self._waypoints.append((
-                float(wp['x']) + origin_x,
-                float(wp['y']) + origin_y,
-            ))
-
-        if not self._waypoints:
-            raise ValueError("No se encontraron waypoints validos")
-
-        self._index = 0
-        return list(self._waypoints)
 
     def set_waypoints(self, waypoints: list) -> list:
         """Carga waypoints en memoria (coords locales absolutas, sin offset).

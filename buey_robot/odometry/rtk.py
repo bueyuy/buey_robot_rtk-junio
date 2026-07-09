@@ -1,8 +1,8 @@
 """Odometria RTK: convierte /gps/fix -> /odom_filtered usando GPSConverter.
 
 El heading sale del nodo mpu6050_gyro (/heading/fused = gyro + COG GPS, ENU); con
-use_imu_heading=false cae al COG del GPS. Abstrae la fuente de odometria igual que
-odometry/zed.py, de modo que navigation/controller.py no sabe cual esta corriendo.
+use_imu_heading=false cae al COG del GPS. Produce /odom_filtered, que consume
+navigation/controller.py sin saber como se genero.
 """
 
 import rclpy
@@ -14,12 +14,16 @@ from std_msgs.msg import Float32
 import math
 
 from buey_robot.adapters.mqtt.client import get_client
-from buey_robot.adapters.mqtt.inputs.positions import MqttPositionsInput
-from buey_robot.adapters.mqtt.outputs.position import MqttPositionOutput
+from buey_robot.adapters.mqtt.outputs.origin import MqttOriginOutput
 from buey_robot.utils.config import load_config, require_key
 from buey_robot.utils.math import angle_normalize
 from buey_robot.utils.filters import MovingAverageFilter, ExponentialFilter
 from buey_robot.utils.gps_converter import GPSConverter
+
+# Accuracy horizontal (m) por debajo de la cual un fix se considera RTK Fixed (cm)
+# en vez de Float (decimetro). Alineado con la covarianza del driver gps_nmea:
+# Fixed -> 0.02, Float -> 0.05. Solo se usa si gps.origin.allow_float=false.
+_RTK_FIXED_MAX_ACCURACY_M = 0.035
 
 
 class RTKOdometry(Node):
@@ -28,7 +32,10 @@ class RTKOdometry(Node):
 
         # --- Parametros GPS/navegacion (ROS2 estandar, sin defaults) ---
         self.declare_parameter('gps.origin.auto_set', Parameter.Type.BOOL)
-        self.declare_parameter('gps.origin.use_mqtt_base', Parameter.Type.BOOL)
+        # Si true, el origen se fija con el primer fix RTK aunque sea FLOAT (la
+        # precision absoluta del origen no afecta la nav: se cancela en la geometria
+        # relativa robot<->waypoint). Si false, espera un RTK Fixed (cm) para el origen.
+        self.declare_parameter('gps.origin.allow_float', Parameter.Type.BOOL)
         self.declare_parameter('gps.quality.min_satellites', Parameter.Type.INTEGER)
         self.declare_parameter('gps.quality.require_rtk_fix', Parameter.Type.BOOL)
         self.declare_parameter('gps.filter.enabled', Parameter.Type.BOOL)
@@ -37,11 +44,10 @@ class RTKOdometry(Node):
         self.declare_parameter('gps.heading.filter_alpha', Parameter.Type.DOUBLE)
         self.declare_parameter('gps.imu.use_imu_heading', Parameter.Type.BOOL)
         self.declare_parameter('gps.imu.heading_topic', Parameter.Type.STRING)
-        self.declare_parameter('gps.antenna.offset_x_m', Parameter.Type.DOUBLE)
         self.declare_parameter('gps.frame_id', Parameter.Type.STRING)
 
         self.auto_set_origin = self.get_parameter('gps.origin.auto_set').value
-        self.use_mqtt_base = self.get_parameter('gps.origin.use_mqtt_base').value
+        self.origin_allow_float = self.get_parameter('gps.origin.allow_float').value
         self.min_satellites = self.get_parameter('gps.quality.min_satellites').value
         self.require_rtk = self.get_parameter('gps.quality.require_rtk_fix').value
         self.filter_enabled = self.get_parameter('gps.filter.enabled').value
@@ -50,7 +56,6 @@ class RTKOdometry(Node):
         self.heading_alpha = self.get_parameter('gps.heading.filter_alpha').value
         self.use_imu_heading = self.get_parameter('gps.imu.use_imu_heading').value
         self.imu_heading_topic = self.get_parameter('gps.imu.heading_topic').value
-        self.antenna_offset_x = self.get_parameter('gps.antenna.offset_x_m').value
         self.frame_id = self.get_parameter('gps.frame_id').value
 
         # Conversor GPS y filtros
@@ -67,7 +72,7 @@ class RTKOdometry(Node):
         self.gps_received = False
         self.imu_heading_received = False
 
-        # Publishers: misma interfaz que odometry/zed.py
+        # Publishers
         self.odom_filtered_pub = self.create_publisher(Odometry, '/odom_filtered', 10)
         #self.heading_pub = self.create_publisher(Float64, '/heading/gps', 10)
         #self.heading_imu_pub = self.create_publisher(Float64, '/heading/imu', 10)
@@ -85,35 +90,26 @@ class RTKOdometry(Node):
         else:
             self.get_logger().info('RTK Odometry: heading solo-GPS (COG)')
 
-        # BASE como origen del frame local (via MQTT, retained).
-        # Cuando use_mqtt_base=true, el origen ENU lo fija la BASE publicada por
-        # el dashboard (repetible entre corridas) en vez del primer fix GPS.
-        self._positions_input = None
-        self._position_output = None
-        if self.use_mqtt_base:
-            mqtt_cfg = load_config('mqtt.yaml')
-            mqtt = get_client(mqtt_cfg, logger=self.get_logger())
-            topics = {
-                'base': require_key(mqtt_cfg, 'topics', 'positions_base'),
-                'start': require_key(mqtt_cfg, 'topics', 'positions_start'),
-            }
-            self._positions_input = MqttPositionsInput(
-                mqtt, on_base=self._on_base, on_start=lambda d: None, topics=topics)
-            # Publicar el CENTRO (ya con lever-arm) en lat/lon para el mapa.
-            self._position_output = MqttPositionOutput(mqtt, mqtt_cfg)
+        # Salida MQTT (capa transport; rtk no importa paho): ORIGEN del frame ENU
+        # (primer fix, donde arranca el robot) -> el controller lo consume para
+        # convertir los waypoints al mismo frame. La posicion del robot (centro, ya
+        # con lever-arm de antena) la publica el driver GPS en rtk/location/json:
+        # una unica ubicacion, no hay cruda + corregida.
+        mqtt_cfg = load_config('mqtt.yaml')
+        mqtt = get_client(mqtt_cfg, logger=self.get_logger())
+        self._origin_output = MqttOriginOutput(mqtt, mqtt_cfg)
 
         self.get_logger().info('RTK Odometry iniciado')
         self.get_logger().info(f'  Min sats: {self.min_satellites}, Require RTK: {self.require_rtk}')
-        self.get_logger().info(f'  Antena lever-arm: {self.antenna_offset_x:.2f}m adelante del centro')
-        if self.use_mqtt_base:
-            self.get_logger().info('  Origen: BASE MQTT (esperando bueyuy/positions/base)')
+        self.get_logger().info('  Origen: primer fix GPS (auto), publicado a la nav')
 
-    def _on_base(self, base: dict):
-        """Fija el origen ENU desde la BASE publicada por el dashboard."""
-        self.gps_converter.set_origin(base['lat'], base['lon'])
-        self.gps_received = True
-        self.get_logger().info(
-            f"Origen GPS desde BASE: lat={base['lat']:.8f}, lon={base['lon']:.8f}")
+    def _origin_fix_ok(self, msg: GPSFix) -> bool:
+        """True si el fix sirve para fijar el origen. allow_float=true acepta cualquier
+        fix (ya paso el gate RTK); false exige RTK Fixed (accuracy de cm por covarianza)."""
+        if self.origin_allow_float:
+            return True
+        acc = math.sqrt(max(0.0, msg.position_covariance[0]))
+        return acc <= _RTK_FIXED_MAX_ACCURACY_M
 
     def gps_callback(self, msg: GPSFix):
         """Callback GPS: convierte a ENU, calcula heading, publica /odom_filtered."""
@@ -125,33 +121,30 @@ class RTKOdometry(Node):
             )
             return
 
-        # Establecer origen. Con use_mqtt_base, el origen lo fija _on_base desde
-        # la BASE retenida; NO auto-fijar desde el primer fix (esperar la BASE).
+        # Origen del frame ENU: primer fix GPS (donde arranca el robot). Se publica
+        # a MQTT para que el controller convierta los waypoints al mismo frame. Con
+        # allow_float=false, espera un RTK Fixed; con true, sirve tambien Float.
         if not self.gps_converter.origin_set:
-            if self.use_mqtt_base:
-                self.get_logger().warn(
-                    'Esperando BASE (bueyuy/positions/base) para fijar origen...',
-                    throttle_duration_sec=5.0,
-                )
-                return
-            if self.auto_set_origin:
+            if self.auto_set_origin and self._origin_fix_ok(msg):
                 self.gps_converter.set_origin(msg.latitude, msg.longitude)
+                self._origin_output.send(msg.latitude, msg.longitude)
+                acc = math.sqrt(max(0.0, msg.position_covariance[0]))
+                kind = 'FIXED' if acc <= _RTK_FIXED_MAX_ACCURACY_M else 'FLOAT'
                 self.get_logger().info(
-                    f'Origen GPS establecido: lat={msg.latitude:.8f}, lon={msg.longitude:.8f}')
+                    f'Origen GPS (primer fix, {kind}, ~{acc:.2f}m): '
+                    f'lat={msg.latitude:.8f}, lon={msg.longitude:.8f}')
                 self.gps_received = True
+            elif self.auto_set_origin:
+                self.get_logger().warn(
+                    'Esperando RTK Fixed para el origen (allow_float=false)...',
+                    throttle_duration_sec=5.0)
 
         if not self.gps_converter.origin_set:
             return
 
+        # msg.latitude/longitude YA es el centro del robot: el driver GPS aplica el
+        # lever-arm de la antena antes de publicar /gps/fix (unica ubicacion).
         x, y = self.gps_converter.gps_to_local(msg.latitude, msg.longitude)
-
-        # Lever-arm de la antena: la antena esta antenna_offset_x ADELANTE del centro
-        # del robot (montada en la trompa). Trasladamos la posicion al centro restando
-        # el offset en la direccion del heading (mismo patron que camera.offset_x_m en
-        # zed.py). Sin heading todavia (arranque), se usa la posicion de la antena.
-        if self.antenna_offset_x != 0.0 and self.current_heading is not None:
-            x -= self.antenna_offset_x * math.cos(self.current_heading)
-            y -= self.antenna_offset_x * math.sin(self.current_heading)
 
         if self.filter_enabled and self.x_filter and self.y_filter:
             x = self.x_filter.update(x)
@@ -215,13 +208,6 @@ class RTKOdometry(Node):
         msg.twist.twist.linear.x = self.current_speed
 
         self.odom_filtered_pub.publish(msg)
-
-        # Publicar el CENTRO en lat/lon para el mapa de la telemetria: esquinas
-        # limpias en los giros (el centro casi no se mueve al girar en el lugar),
-        # sin las "narices" de la antena cruda de rtk/location/json.
-        if self._position_output is not None and self.gps_converter.origin_set:
-            lat, lon = self.gps_converter.local_to_gps(self.current_x, self.current_y)
-            self._position_output.send(lat, lon)
 
 
 def main(args=None):

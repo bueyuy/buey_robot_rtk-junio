@@ -11,20 +11,19 @@
       require_rtk_fix: true
       frame_id: "gps_link"
 
-      # Lever-arm de la antena rover: montada offset_x_m ADELANTE del centro del
-      # robot (en la trompa). rtk.py traslada la posicion GPS al centro restando
-      # este offset en la direccion del heading (igual que camera.offset_x_m en
-      # zed.py). Positivo = adelante; 0 = antena ya en el centro.
-      antenna:
-        offset_x_m: 0.40
+      # (El lever-arm de la antena vive en robot.yaml -> robot.antenna.offset_x_m,
+      # propiedad fisica de montaje. Lo aplica el driver gps_nmea.)
 
-      # Odometry RTK: auto-establece primer fix como origen
+      # Odometry RTK: el origen ENU es el primer fix GPS (donde arranca el robot).
+      # rtk.py lo publica (bueyuy/odom/origin) para que el controller convierta los
+      # waypoints al mismo frame. Ya no hay BASE marcada desde el dashboard.
       origin:
         auto_set: true
-        # Si true, el origen ENU lo fija la BASE de MQTT (bueyuy/positions/base) en vez
-        # del primer fix; rtk.py espera la BASE antes de producir /odom_filtered.
-        # navigation.yaml lo pone en true (gps.origin.use_mqtt_base) para outdoor.
-        use_mqtt_base: false
+        # true: fija el origen con el primer fix RTK aunque sea FLOAT (decimetro).
+        # La precision del origen NO afecta la nav (se cancela en la geometria
+        # relativa robot<->waypoint), asi arranca sin esperar el Fixed. false: exige
+        # RTK Fixed (cm) para el origen.
+        allow_float: true
 
       # Odometry RTK: calidad minima para navegar
       quality:
@@ -35,20 +34,3 @@
       filter:
         enabled: true
         window_size: 5
-
-    imu:
-      topics:
-        # Topics MQTT que publica la IMU (Pico W u otro microcontrolador)
-        accel_x: "imu/accel/x"
-        accel_y: "imu/accel/y"
-        accel_z: "imu/accel/z"
-        mag_x: "imu/mag/x"
-        mag_y: "imu/mag/y"
-        mag_z: "imu/mag/z"
-        heading: "imu/heading"
-        json: "imu/data/json"
-
-    # Filtro de odometria ZED (leido por odometry/zed.py)
-    filter:
-      enabled: true
-      window_size: 5

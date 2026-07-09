@@ -1,15 +1,10 @@
-# UNICO yaml de navegacion. Valores OUTDOOR (RTK) aplicados directo (ya no hay
-# navigation_outdoor.yaml/navigation_indoor.yaml ni merge). Estamos trabajando
-# outdoor: si algun dia se vuelve a indoor (ZED), re-tunear (sobre todo bajar
-# wait_for_gyro_calibration/trigger_gyro_calibration a false: ZED no tiene gyro).
+# UNICO yaml de navegacion. Outdoor (GPS RTK). Los waypoints llegan SIEMPRE por
+# MQTT (bueyuy/waypoints, lat/lon); no hay carga por archivo YAML.
 /**:
   ros__parameters:
-    auto_load_waypoints: ""                # ruta YAML local; el launch la sobreescribe (solo si goal_source=waypoints_file)
-    goal_source: "mqtt_waypoints"          # origen de la meta: ruta lat/lon por MQTT (bueyuy/waypoints), fijada a la BASE
 
     controller:
       frequency_hz: 10.0                   # Hz del lazo de control
-      mode: "no-arc"                       # no-arc = stop_and_turn (para/gira/avanza); "arc" = curvas suaves (indoor)
       goal:
         position_tolerance_m: 0.5          # m: distancia al WP para darlo por alcanzado y pasar al siguiente
         alignment_tolerance_deg: 10.0      # grados: error de rumbo maximo antes de dejar de girar y avanzar
@@ -27,10 +22,6 @@
         decel_rate_linear: 0.03            # rampa: desaceleracion lineal por tick
         accel_rate_angular: 0.03           # rampa: aceleracion angular por tick
         decel_rate_angular: 0.03           # rampa: desaceleracion angular por tick
-      arc:                                 # (solo si mode: arc)
-        linear_m_s: 0.233                  # m/s: velocidad lineal durante el arco
-        angular_rad_s: 0.302               # rad/s: velocidad angular durante el arco
-        start_distance_m: 1.3              # m: distancia al WP donde arranca el arco (recorta la esquina)
       prealign:
         enabled: true                      # creep recto inicial antes de navegar (genera COG, alinea el heading fused)
         distance_m: 1.0                    # m: minimo a avanzar recto antes de poder navegar
@@ -39,20 +30,12 @@
       wait_for_gyro_calibration: true      # robot quieto hasta que el gyro termine su auto-bias
       trigger_gyro_calibration: true       # recalibrar el gyro fresco al arrancar la nav (robot recien parado en el inicio)
 
-    odometry:
-      topic: "/zed/zed_node/odom"          # topic odometria ZED (solo indoor; outdoor lo ignora, rtk usa /gps/fix)
-
-    camera:
-      offset_x_m: 0.875                    # m: offset camara ZED al centro del robot (solo indoor)
-
     gps:
-      origin:
-        use_mqtt_base: true                # origen ENU = BASE del dashboard (repetible; va junto a goal_source mqtt_waypoints)
       heading:
         min_movement_threshold: 0.25       # m/s: por debajo de esto congela el ultimo heading bueno (evita ruido RTK)
         filter_alpha: 0.15                 # suavizado exponencial del heading GPS
       imu:
-        use_imu_heading: true              # rtk adopta /heading/fused (gyro+COG GPS) como heading; false = solo COG GPS
+        use_imu_heading: true              #  MOVERLO FUERA DE GPS... A rtk adopta /heading/fused (gyro+COG GPS) como heading; false = solo COG GPS
         heading_topic: "/heading/fused"    # topic del heading que consume rtk
 
     joystick:

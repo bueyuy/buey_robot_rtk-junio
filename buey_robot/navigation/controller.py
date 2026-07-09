@@ -1,11 +1,8 @@
-"""Controlador de trayectoria: navega entre waypoints con odometria.
+"""Controlador de trayectoria: navega entre waypoints con odometria (stop_and_turn:
+para / gira / avanza). Outputs MQTT via inyeccion.
 
-Modos: stop_and_turn | arc (ALIGN->CRUISE->ARC->FINAL_APPROACH, ver arc_states.py).
-Outputs MQTT via inyeccion. Logica ARC en ArcStateMixin.
-
-Recibe /odom_filtered (ya filtrada y con offset de camara aplicado por odometry/zed.py
-o odometry/rtk.py). NO filtra ni corrige posicion — eso es responsabilidad del nodo
-de odometria correspondiente.
+Recibe /odom_filtered (ya filtrada por odometry/rtk.py). NO filtra ni corrige
+posicion — eso es responsabilidad del nodo de odometria.
 """
 
 import math
@@ -19,13 +16,12 @@ from nav_msgs.msg import Odometry
 from std_msgs.msg import String, Float32, Bool, Empty
 
 from buey_robot.adapters.mqtt.client import get_client
-from buey_robot.adapters.mqtt.inputs.positions import MqttPositionsInput
+from buey_robot.adapters.mqtt.inputs.origin import MqttOriginInput
 from buey_robot.adapters.mqtt.inputs.start import MqttStartInput
 from buey_robot.adapters.mqtt.inputs.waypoints import MqttWaypointsInput
 from buey_robot.adapters.mqtt.outputs.config import MqttConfigOutput
 from buey_robot.adapters.mqtt.outputs.status import MqttStatusOutput
 from buey_robot.adapters.mqtt.outputs.waypoints import MqttWaypointsOutput
-from buey_robot.navigation.arc_states import ArcStateMixin
 from buey_robot.navigation.ramp_profile import RampProfile
 from buey_robot.navigation.waypoint_manager import WaypointManager
 from buey_robot.utils.config import load_config, require_key
@@ -41,14 +37,14 @@ GYRO_CALIB_TRIGGER_GRACE_S = 1.5
 GYRO_CALIB_TRIGGER_DELAY_S = 2.0
 
 
-class TrajectoryController(Node, ArcStateMixin):
+class TrajectoryController(Node):
     def __init__(self):
         super().__init__('trajectory_controller')
 
         # Declaracion de params (ROS2 estandar, sin defaults — falla si YAML no los provee)
         T = Parameter.Type
         _d = self.declare_parameter  # alias para compactar
-        _d('controller.frequency_hz', T.DOUBLE);  _d('controller.mode', T.STRING)
+        _d('controller.frequency_hz', T.DOUBLE)
         _d('controller.goal.position_tolerance_m', T.DOUBLE)
         _d('controller.goal.alignment_tolerance_deg', T.DOUBLE)
         _d('controller.velocity.cruise_linear_m_s', T.DOUBLE)
@@ -59,8 +55,6 @@ class TrajectoryController(Node, ArcStateMixin):
         _d('controller.deceleration.distance_m', T.DOUBLE)
         _d('controller.ramp.accel_rate_linear', T.DOUBLE);  _d('controller.ramp.decel_rate_linear', T.DOUBLE)
         _d('controller.ramp.accel_rate_angular', T.DOUBLE); _d('controller.ramp.decel_rate_angular', T.DOUBLE)
-        _d('controller.arc.linear_m_s', T.DOUBLE);  _d('controller.arc.angular_rad_s', T.DOUBLE)
-        _d('controller.arc.start_distance_m', T.DOUBLE)
         # Creep recto inicial: avanzar en linea recta antes de navegar para generar
         # COG y alinear el heading fused (gyro+GPS) — sin esto el robot rota en el
         # lugar con un heading todavia sin alinear.
@@ -76,12 +70,10 @@ class TrajectoryController(Node, ArcStateMixin):
         # mpu6050_gyro solo publica /heading/gyro DESPUES de calibrar el bias.
         _d('controller.wait_for_gyro_calibration', T.BOOL)
         # Disparar una calibracion FRESCA del gyro al arrancar la navegacion (en vez
-        # de usar la que hizo mpu6050_gyro al levantar outdoor_rtk): el robot esta
+        # de usar la que hizo mpu6050_gyro al levantar el stack): el robot esta
         # recien parado y quieto en el punto de inicio. El controller publica
         # /gyro/calibrate y espera a que reaparezca /heading/gyro (recalibrado).
         _d('controller.trigger_gyro_calibration', T.BOOL)
-        _d('auto_load_waypoints', T.STRING)
-        _d('goal_source', T.STRING)  # "waypoints_file" (x,y local) | "mqtt_waypoints" (ruta MQTT)
         # Motor params — el gateway los lee por separado; aqui solo para publicar config MQTT
         _d('motor_control.wheel_separation', T.DOUBLE); _d('motor_control.max_output', T.DOUBLE)
         _d('motor_control.linear_gain', T.DOUBLE);      _d('motor_control.angular_gain', T.DOUBLE)
@@ -90,7 +82,6 @@ class TrajectoryController(Node, ArcStateMixin):
         # Lectura de params
         gp = self.get_parameter
         self.frequency = gp('controller.frequency_hz').value
-        self.mode = gp('controller.mode').value
         self.goal_tolerance = gp('controller.goal.position_tolerance_m').value
         self.alignment_tolerance = math.radians(gp('controller.goal.alignment_tolerance_deg').value)
         self.cruise_linear = gp('controller.velocity.cruise_linear_m_s').value
@@ -105,8 +96,8 @@ class TrajectoryController(Node, ArcStateMixin):
         self.prealign_max_distance = gp('controller.prealign.max_distance_m').value
         self._prealign_done = False
         self._prealign_start = None
-        # Convergencia del heading fused: si no se exige, arranca ya como True (indoor
-        # /ZED no tiene gyro+GPS). Si se exige, lo habilita /heading/fused_ready.
+        # Convergencia del heading fused: si no se exige, arranca ya como True.
+        # Si se exige, lo habilita /heading/fused_ready.
         self._fused_converged = not self.prealign_require_converge
         self.wait_for_gyro_cal = gp('controller.wait_for_gyro_calibration').value
         self.trigger_gyro_cal = gp('controller.trigger_gyro_calibration').value
@@ -128,18 +119,8 @@ class TrajectoryController(Node, ArcStateMixin):
             decel_rate=gp('controller.ramp.decel_rate_angular').value,
         )
 
-        # Arc mode params
-        if self.mode == 'arc':
-            self.arc_linear = gp('controller.arc.linear_m_s').value
-            self.arc_angular = gp('controller.arc.angular_rad_s').value
-            self.arc_start_distance = gp('controller.arc.start_distance_m').value
-        self._arc_state = 'CRUISE'
-        self._final_aligning = False
-
         # El controller suscribe directamente a /odom_filtered — la odometria ya llega
-        # filtrada y con offset de camara aplicado por odometry/zed.py o odometry/rtk.py.
-        self.waypoint_file = gp('auto_load_waypoints').value
-        self.goal_source = gp('goal_source').value
+        # filtrada por odometry/rtk.py.
 
         # Cliente MQTT (mqtt.yaml no es param ROS2)
         mqtt_cfg = load_config('mqtt.yaml')
@@ -148,11 +129,11 @@ class TrajectoryController(Node, ArcStateMixin):
         self.config_output = MqttConfigOutput(self._mqtt, mqtt_cfg)
         self.waypoints_output = MqttWaypointsOutput(self._mqtt, mqtt_cfg)
 
-        # Origen del frame local (ENU), fijado por la BASE del dashboard (mismo que
+        # Origen del frame local (ENU), fijado por el origen que publica rtk (mismo que
         # rtk.py), para convertir waypoints lat/lon al frame de /odom_filtered.
         self._gps_converter = GPSConverter()
-        # Ruta empujada por MQTT que llego antes que la BASE: (waypoints_gps, loop).
-        # Se convierte y carga apenas se fija el origen (ver _on_waypoints / _on_base).
+        # Ruta empujada por MQTT que llego antes que el origen: (waypoints_gps, loop).
+        # Se convierte y carga apenas se fija el origen (ver _on_waypoints / _on_origin).
         self._pending_waypoints_gps = None
         # Recorrer la ruta en bucle (lo setea _on_waypoints desde el flag MQTT "loop").
         self._loop = False
@@ -161,25 +142,21 @@ class TrajectoryController(Node, ArcStateMixin):
         # retenida haga mover el robot solo, y permite revisar la ruta en el mapa.
         self._route_loaded = False
 
-        # Modo mqtt_waypoints: la ruta llega como lat/lon por MQTT (bueyuy/waypoints)
-        # y se fija al origen BASE (fija, mismo frame que rtk.py) -> los waypoints no
-        # se desplazan si el robot arranca corrido. Requiere la BASE del dashboard.
-        if self.goal_source == 'mqtt_waypoints':
-            topics = {
-                'base': require_key(mqtt_cfg, 'topics', 'positions_base'),
-                'start': require_key(mqtt_cfg, 'topics', 'positions_start'),
-            }
-            # Solo interesa la BASE (origen). START no se usa en este modo.
-            self._positions_input = MqttPositionsInput(
-                self._mqtt, on_base=self._on_base, on_start=lambda d: None, topics=topics)
-            self._waypoints_input = MqttWaypointsInput(
-                self._mqtt, on_waypoints=self._on_waypoints,
-                topic=require_key(mqtt_cfg, 'topics', 'waypoints'))
-            # Disparador de arranque (GO): el dashboard lo publica cuando el robot
-            # esta en el inicio. Recien ahi arranca la ruta cargada.
-            self._start_input = MqttStartInput(
-                self._mqtt, on_start=self._on_nav_start,
-                topic=require_key(mqtt_cfg, 'topics', 'nav_start'))
+        # UNICA fuente de waypoints: MQTT. La ruta llega como lat/lon por
+        # bueyuy/waypoints y se convierte al frame de /odom_filtered usando el ORIGEN
+        # que publica rtk.py (primer fix GPS, donde arranca el robot). Mismo origen
+        # que rtk -> robot y waypoints en el mismo frame.
+        self._origin_input = MqttOriginInput(
+            self._mqtt, on_origin=self._on_origin,
+            topic=require_key(mqtt_cfg, 'topics', 'odom_origin'))
+        self._waypoints_input = MqttWaypointsInput(
+            self._mqtt, on_waypoints=self._on_waypoints,
+            topic=require_key(mqtt_cfg, 'topics', 'waypoints'))
+        # Disparador de arranque (GO): el dashboard lo publica cuando el robot esta
+        # en el inicio. Recien ahi arranca la ruta cargada.
+        self._start_input = MqttStartInput(
+            self._mqtt, on_start=self._on_nav_start,
+            topic=require_key(mqtt_cfg, 'topics', 'nav_start'))
 
         # Estado
         self.current_x = self.current_y = self.current_heading = None
@@ -189,7 +166,7 @@ class TrajectoryController(Node, ArcStateMixin):
         self.trajectory_active = False
         self.aligning = False
 
-        # Publishers: solo cmd_vel y status — la odometria la produce odometry/zed.py o rtk.py
+        # Publishers: solo cmd_vel y status — la odometria la produce odometry/rtk.py
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.status_pub = self.create_publisher(String, '/trajectory/status', 10)
 
@@ -222,19 +199,14 @@ class TrajectoryController(Node, ArcStateMixin):
         # Timers
         self.create_timer(1.0 / self.frequency, self.control_loop)
 
-        self.auto_load_attempted = False
-        if self.goal_source == 'mqtt_waypoints':
-            # La ruta la empuja el dashboard por bueyuy/waypoints (ver _on_waypoints);
-            # no hay timer de carga, el callback MQTT arranca la trayectoria.
-            self.get_logger().info('Meta desde MQTT: ruta de waypoints (bueyuy/waypoints, origen=BASE)')
-        elif self.waypoint_file:
-            self.auto_load_timer = self.create_timer(1.0, self.try_auto_load_waypoints)
-            self.get_logger().info(f'Auto-carga configurada: {self.waypoint_file}')
+        # La ruta la empuja el dashboard por bueyuy/waypoints (ver _on_waypoints);
+        # no hay carga por archivo, el callback MQTT arranca la trayectoria.
+        self.get_logger().info('Meta: ruta de waypoints por MQTT (bueyuy/waypoints, origen auto de rtk)')
 
         self._config_published = False
         self.create_timer(3.0, self._publish_config_once)
 
-        self.get_logger().info(f'Trajectory Controller iniciado (modo: {self.mode})')
+        self.get_logger().info('Trajectory Controller iniciado (stop_and_turn)')
         self.get_logger().info(f'  Odom: /odom_filtered (filtrada por odometry node)')
         self.get_logger().info(f'  Goal tolerance: {self.goal_tolerance:.2f}m')
 
@@ -303,7 +275,6 @@ class TrajectoryController(Node, ArcStateMixin):
         gp = self.get_parameter
         self.config_output.publish_once(
             nav_params={
-                'mode': self.mode,
                 'goal_tolerance_m': self.goal_tolerance,
                 'alignment_tolerance_deg': math.degrees(self.alignment_tolerance),
                 'cruise_linear_m_s': self.cruise_linear,
@@ -320,43 +291,17 @@ class TrajectoryController(Node, ArcStateMixin):
             },
         )
 
-    def try_auto_load_waypoints(self):
-        if self.auto_load_attempted:
-            return
-        if not self.odom_received or not self.waypoint_file:
-            return
-
-        self.get_logger().info(f'Cargando waypoints: {self.waypoint_file}')
-        try:
-            origin_x = self.current_x if self.current_x is not None else 0.0
-            origin_y = self.current_y if self.current_y is not None else 0.0
-            wps = self.wp_manager.load_from_file(self.waypoint_file, origin_x, origin_y)
-            self.trajectory_active = True
-            self.aligning = False
-            self.auto_load_attempted = True
-
-            if hasattr(self, 'auto_load_timer'):
-                self.auto_load_timer.cancel()
-
-            self.get_logger().info(f'Cargados {len(wps)} waypoints')
-            for i, (wx, wy) in enumerate(wps):
-                self.get_logger().info(f'  WP{i}: x={wx:.2f}, y={wy:.2f}')
-
-            self.waypoints_output.send_xy(self.wp_manager.waypoints)
-
-        except Exception as e:
-            self.get_logger().error(f'Error cargando waypoints: {e}')
-
     # ------------------------------------------------------------------
-    # Modo mqtt_waypoints: origen BASE + ruta de waypoints por MQTT
+    # Fuente unica de waypoints: origen (auto, de rtk) + ruta por MQTT
     # ------------------------------------------------------------------
 
-    def _on_base(self, base: dict):
-        """BASE: fija el origen del frame local (mismo que rtk.py)."""
-        self._gps_converter.set_origin(base['lat'], base['lon'])
+    def _on_origin(self, origin: dict):
+        """Origen del frame ENU publicado por rtk.py (primer fix GPS). Fija el mismo
+        origen para convertir los waypoints al frame de /odom_filtered."""
+        self._gps_converter.set_origin(origin['lat'], origin['lon'])
         self.get_logger().info(
-            f"BASE recibida (origen): lat={base['lat']:.8f}, lon={base['lon']:.8f}")
-        # Si llego una ruta MQTT antes que la BASE, cargarla ahora que hay origen.
+            f"Origen recibido (de rtk): lat={origin['lat']:.8f}, lon={origin['lon']:.8f}")
+        # Si llego una ruta MQTT antes que el origen, cargarla ahora.
         if self._pending_waypoints_gps is not None:
             pending_wps, pending_loop = self._pending_waypoints_gps
             self._pending_waypoints_gps = None
@@ -366,10 +311,10 @@ class TrajectoryController(Node, ArcStateMixin):
         """CARGA una ruta de waypoints GPS via MQTT (bueyuy/waypoints), pero NO
         arranca: deja la ruta lista y espera el GO (bueyuy/navigation/start).
 
-        Convierte cada {lat,lon} a x/y con el origen BASE (mismo frame que
+        Convierte cada {lat,lon} a x/y con el origen que publica rtk (mismo frame que
         /odom_filtered) y la publica al mapa. loop=true: al completar el ultimo
         waypoint vuelve al primero (ver control_loop). Si el origen aun no esta
-        (falta BASE), guarda la ruta y la carga al llegar la BASE (ver _on_base).
+        (sin fix GPS todavia), guarda la ruta y la carga al llegar (ver _on_origin).
 
         Lista vacia (waypoints_gps: []) = comando LIMPIAR/idle: frena y descarta."""
         if not waypoints_gps:
@@ -379,7 +324,7 @@ class TrajectoryController(Node, ArcStateMixin):
         if not self._gps_converter.origin_set:
             self._pending_waypoints_gps = (waypoints_gps, loop)
             self.get_logger().warn(
-                'Waypoints MQTT recibidos pero falta BASE: se cargaran al fijar el origen')
+                'Waypoints MQTT recibidos pero falta el origen (esperando fix GPS de rtk)')
             return
 
         try:
@@ -394,10 +339,9 @@ class TrajectoryController(Node, ArcStateMixin):
         self._route_loaded = True
         self.trajectory_active = False   # NO arrancar: esperar el GO
         self.aligning = False
-        self.auto_load_attempted = True
 
         self.get_logger().info(
-            f'Ruta cargada: {len(local)} waypoints (origen=BASE, loop={loop}) — '
+            f'Ruta cargada: {len(local)} waypoints (loop={loop}) — '
             f'esperando GO (bueyuy/navigation/start)')
         for i, (wx, wy) in enumerate(local):
             self.get_logger().info(f'  WP{i}: x={wx:.2f}, y={wy:.2f}')
@@ -493,10 +437,7 @@ class TrajectoryController(Node, ArcStateMixin):
             self._prealign_straight()
             return
 
-        if self.mode == 'arc':
-            self._control_arc(goal_x, goal_y)
-        else:
-            self._control_stop_and_turn(goal_x, goal_y)
+        self._control_stop_and_turn(goal_x, goal_y)
 
     def _prealign_straight(self):
         """Avanza recto para generar COG y alinear el heading fused (gyro+GPS) antes

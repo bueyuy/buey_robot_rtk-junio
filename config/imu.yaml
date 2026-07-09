@@ -28,7 +28,7 @@ mpu6050_gyro:
     gyro_alive_min_std: 0.0001
     # Recalibracion on-demand (std_msgs/Empty): el controller la dispara al arrancar
     # la navegacion para tener un bias fresco con el robot parado en el inicio, en vez
-    # de depender del auto-bias que se hizo al levantar outdoor_rtk.
+    # de depender del auto-bias que se hizo al levantar el stack.
     calibrate_topic: "/gyro/calibrate"
 
     # Integracion de heading (yaw)

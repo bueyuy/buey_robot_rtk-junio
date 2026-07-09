@@ -1,6 +1,6 @@
 """Perfil de rampa asimetrica para aceleracion/desaceleracion suave.
 
-La rampa suaviza cambios de velocidad para proteger la visual odometry.
+La rampa suaviza cambios de velocidad para suavizar el arranque/frenado (skid-steer).
 decel_rate > accel_rate: frena mas rapido de lo que acelera.
 """
 

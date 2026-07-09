@@ -54,7 +54,7 @@ class Mpu6050Gyro(Node):
         # Topic para disparar una recalibracion on-demand (std_msgs/Empty). Lo usa el
         # controller para recalibrar el bias al arrancar la navegacion (robot recien
         # parado y quieto en el inicio), en vez de depender de la calibracion que se
-        # hizo al levantar outdoor_rtk.
+        # hizo al levantar el stack.
         self.declare_parameter('calibrate_topic', Parameter.Type.STRING)
         # Deteccion de gyro muerto/congelado: un MPU6050 vivo siempre tiene ruido
         # (std del wz en reposo > 0); un topic equivocado (LSM303, sin gyro) o un

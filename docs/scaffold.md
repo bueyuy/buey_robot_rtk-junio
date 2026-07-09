@@ -70,15 +70,13 @@ buey_robot/
       config.py                    (load_config + require_key)
 
   launch/
-    motor_gateway.launch.py        navigation.joystick + motor.gateway. CORRE PERMANENTE
-                                   en una terminal aparte; recibe /cmd_vel del controller
-                                   autonomo o /cmd_vel_joy del joystick (con prioridad 600ms).
-    outdoor_rtk.launch.py          mapper.gps_nmea + mapper.imu + odometry.rtk
-                                   + navigation.controller + adapters.mqtt.outputs.pose.
-                                   Arranca/se mata por iteracion en la terminal principal.
-    indoor_zed.launch.py           (ZED wrapper externo) + odometry.zed + navigation.controller
-                                   + adapters.mqtt.outputs.pose. Idem que outdoor pero indoor.
-    telemetry.launch.py            solo adapters.mqtt.outputs.pose (debug standalone).
+    nav_outdoor.launch.py          STACK COMPLETO (un solo comando): motor_gateway +
+                                   micro_ros_agent + mapper.gps_nmea + mapper.mpu6050_gyro +
+                                   odometry.rtk + adapters.mqtt.outputs.pose + imu_bridge +
+                                   navigation.controller. Full RTK, waypoints por MQTT.
+    motor_gateway.launch.py        navigation.joystick + motor.gateway (drive manual; lo
+                                   incluye nav_outdoor). Recibe /cmd_vel del controller
+                                   autonomo o /cmd_vel_joy del joystick (prioridad 600ms).
 
   config/
     navigation.yaml                controller + algoritmos + waypoint + joystick + ramps
