@@ -6,15 +6,14 @@ Asi se puede reportar RTK / IMU / telemetria MQTT y fijar BASE/START en el
 dashboard sin que el robot intente navegar.
 
 Nodos:
-  - micro_ros_agent           (agente microROS serial -> IMU publica /imu/data)
+  - micro_ros_agent           (agente microROS serial -> IMU publica /mpu6050/imu/data)
   - mapper/gps_nmea.py        (serial NMEA -> /gps/fix + rtk/location/json)
-  - mapper/imu_compass.py     (/imu/mag crudo -> /imu/heading_calibrated)
-  - mapper/mpu6050_gyro.py    (/imu/data crudo -> bias gyro + /heading/gyro)
-  - odometry/rtk.py           (GPS+IMU -> /odom_filtered)
+  - mapper/mpu6050_gyro.py    (/mpu6050/imu/data crudo -> bias gyro + /heading/gyro + /heading/fused)
+  - odometry/rtk.py           (GPS + heading fused -> /odom_filtered)
   - adapters/mqtt/outputs/pose.py  (telemetry MQTT, incluye heading_gps)
 
-La IMU la publica microROS directamente en /imu/data (sensor_msgs/Imu); su agente
-se levanta desde este launch (ros2 run micro_ros_agent ... serial --dev /dev/ttyUSB0).
+La IMU la publica microROS en /mpu6050/imu/data (sensor_msgs/Imu); su agente se
+levanta desde este launch (ros2 run micro_ros_agent ... serial --dev /dev/ttyUSB0).
 
 motor_gateway NO se incluye — corre en terminal aparte con motor_gateway.launch.py.
 Para navegacion autonoma, lanzar ademas trajectory_controller.launch.py.
@@ -57,16 +56,7 @@ def generate_launch_description():
         parameters=[sensors_yaml],
     )
 
-    # Brujula calibrada: /imu/mag (crudo) -> /imu/heading_calibrated
-    imu_compass_node = Node(
-        package='buey_robot',
-        executable='imu_compass',
-        name='imu_compass',
-        output='screen',
-        parameters=[imu_yaml],
-    )
-
-    # Gyro MPU6050: /imu/data (crudo) -> bias + /heading/gyro
+    # Gyro MPU6050: /mpu6050/imu/data (crudo) -> bias + /heading/gyro + /heading/fused
     mpu6050_gyro_node = Node(
         package='buey_robot',
         executable='mpu6050_gyro',
@@ -117,7 +107,6 @@ def generate_launch_description():
     return LaunchDescription([
         micro_ros_agent,
         gps_node,
-        imu_compass_node,
         mpu6050_gyro_node,
         delayed_nodes,
     ])

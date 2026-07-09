@@ -11,8 +11,8 @@ Suscribe:
 
 El heading sale del quaternion de /odom_filtered, que ya viene fusionado por la
 fuente de odometria (rtk.py o zed.py). Asi pose.py no depende de los topics
-/heading/* (rtk ya no los publica: solo emite /odom_filtered). Para comparar IMU
-crudo vs calibrado, ver imu_bridge (bueyuy/imu/heading y bueyuy/imu/heading_calibrated).
+/heading/* (rtk ya no los publica: solo emite /odom_filtered). Para comparar los
+headings (gyro crudo vs fused vs GPS), ver imu_bridge (bueyuy/heading/*).
 
 Publica MQTT:
   - bueyuy/telemetry/json

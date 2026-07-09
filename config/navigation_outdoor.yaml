@@ -4,9 +4,10 @@
 
 /**:
   ros__parameters:
-    # Navegacion punto a punto BASE->START usando los puntos del dashboard.
-    # Para volver a waypoints YAML: comentar este bloque (default waypoints_file).
-    goal_source: "mqtt_positions"
+    # La ruta de waypoints (lat/lon) llega por MQTT desde el dashboard
+    # (bueyuy/waypoints) y se fija al origen BASE. Para volver a un YAML local x,y:
+    # goal_source: "waypoints_file" (default base).
+    goal_source: "mqtt_waypoints"
 
     # --- Tuning anti-zigzag (test linea recta, 2026-05-29) ---
     # Con heading derivado SOLO de GPS (IMU fake = heading fijo, inutil), a baja
@@ -15,8 +16,19 @@
     # re-alineaciones para los ultimos 1.3m). Mitigacion:
     controller:
       # Robot quieto hasta que el gyro (mpu6050_gyro) termine su auto-bias, y
-      # recien ahi navegar (evita mover el robot durante la calibracion).
+      # recien ahi navegar (evita mover el robot durante la calibracion). Con la
+      # deteccion de gyro-vivo (imu.yaml gyro_alive_min_std), si el gyro no reporta
+      # el auto-bias no completa y el robot queda bloqueado en vez de navegar ciego.
       wait_for_gyro_calibration: true
+      # Recalibrar el gyro FRESCO al arrancar la navegacion (robot recien parado en
+      # el inicio), en vez de usar el auto-bias que hizo mpu6050_gyro al levantar
+      # outdoor_rtk (que pudo quedar viejo tras mover el robot con el joystick).
+      trigger_gyro_calibration: true
+      prealign:
+        # Endurecer el arranque: el creep recto no termina hasta que el heading fused
+        # convergio (/heading/fused_ready). Sin esto el robot salia diagonal (~127 deg
+        # de desfase inicial, offset sin alinear en toda la corrida).
+        require_fused_convergence: true
       goal:
         # Aflojar alineacion: el re-trigger de FINAL_APPROACH es 2x este valor,
         # antes 10deg->re-align a 20deg (constantemente violado por ruido heading).

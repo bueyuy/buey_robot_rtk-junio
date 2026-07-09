@@ -22,6 +22,9 @@ topics:
 
   # Estado de navegacion
   trajectory_status: "bueyuy/navigation/status"
+  # Disparador de arranque (GO): el dashboard lo publica (NO retained) tras cargar
+  # la ruta y con el robot en el inicio. El controller navega recien al recibirlo.
+  nav_start: "bueyuy/navigation/start"
 
   # Telemetria consolidada
   telemetry_json: "bueyuy/telemetry/json"

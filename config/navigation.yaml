@@ -4,16 +4,17 @@
     # Sirve como fallback si alguien levanta el controller con `ros2 run` directo.
     auto_load_waypoints: ""
 
-    # Fuente de la meta: "waypoints_file" (YAML) o "mqtt_positions" (navega BASE->START
-    # usando los puntos del dashboard). navigation_outdoor.yaml lo sobreescribe.
+    # Fuente de la meta: "waypoints_file" (YAML local x,y, relativo al arranque —
+    # usado indoor) o "mqtt_waypoints" (ruta lat/lon por MQTT, origen=BASE — usado
+    # outdoor, lo setea navigation_outdoor.yaml).
     goal_source: "waypoints_file"
 
     controller:
       frequency_hz: 10.0
       mode: "no-arc"
       goal:
-        position_tolerance_m: 0.50
-        alignment_tolerance_deg: 10.0
+        position_tolerance_m: 0.5
+        alignment_tolerance_deg: 5.0
       velocity:
         cruise_linear_m_s: 0.3
         min_linear_m_s: 0.15
@@ -40,11 +41,21 @@
       # subir distance_m (~1.5m para 5 fixes) o bajar offset_init_samples (imu.yaml).
       prealign:
         enabled: true
-        distance_m: 1.0
+        distance_m: 1.0             # minimo a avanzar recto antes de poder navegar
+        # require_fused_convergence: no soltar la nav solo por avanzar distance_m;
+        # ademas esperar /heading/fused_ready (offset gyro->GPS convergido). false en
+        # base (indoor/ZED no tiene ese heading); navigation_outdoor.yaml lo pone true.
+        require_fused_convergence: false
+        max_distance_m: 3.0         # tope del creep si la convergencia nunca llega
       # Esperar a que mpu6050_gyro termine el auto-bias (robot quieto) antes de
       # moverse. false por defecto (indoor/ZED no tiene gyro -> no colgar);
       # navigation_outdoor.yaml lo pone en true.
       wait_for_gyro_calibration: false
+      # Disparar una calibracion fresca del gyro al arrancar la navegacion (publica
+      # /gyro/calibrate y espera el /heading/gyro recalibrado). false en base
+      # (indoor); navigation_outdoor.yaml lo pone en true. Va de la mano con
+      # wait_for_gyro_calibration (se dispara y se espera).
+      trigger_gyro_calibration: false
 
     odometry:
       topic: "/zed/zed_node/odom"   # topic ZED; en outdoor_rtk se ignora (rtk.py suscribe /gps/fix)
@@ -52,24 +63,17 @@
     camera:
       offset_x_m: 0.875             # compensacion camara ZED al centro del robot
 
-    # Parametros de heading y fusion IMU para odometry/rtk.py
+    # Parametros de heading para odometry/rtk.py
     gps:
       heading:
-        min_movement_threshold: 0.1 # movimiento minimo para calcular heading GPS (m)
-        filter_alpha: 0.15          # suavizado exponencial del heading GPS (bajado de 0.3: amortigua el transitorio basura del curso GPS al arrancar, que con fusion GPS-heavy mandaba un giro equivocado)
+        min_movement_threshold: 0.1 # movimiento minimo para el heading GPS-only (m)
+        filter_alpha: 0.15          # suavizado exponencial del heading GPS
       imu:
-        use_imu_heading: true      # usar el heading IMU en odometry/rtk.py
-        fusion_alpha: 0.2           # (solo modo brujula) peso del IMU en la fusion complementaria
-        fusion_min_speed: 0.3       # (solo modo brujula) velocidad minima para fusionar (m/s)
-        # heading_is_enu: el heading que consume rtk YA viene fusionado y en yaw
-        # ENU (no es brujula). Lo publica el nodo mpu6050_gyro como /heading/fused
-        # (gyro + offset COG GPS, absoluto sin drift). rtk lo adopta directo como
-        # current_heading: NO re-transforma (sin 90-x ni declinacion) ni re-fusiona.
-        # Poner false para volver al modo brujula (heading_topic absoluto compass).
-        heading_is_enu: true
+        # use_imu_heading=true: rtk adopta /heading/fused (gyro + COG GPS, ya en yaw
+        # ENU, lo publica mpu6050_gyro) directo como current_heading. false: rtk cae
+        # al heading del COG del GPS (sin IMU). La brujula LSM303 fue removida.
+        use_imu_heading: true
         heading_topic: "/heading/fused"
-        # (solo modo brujula, heading_is_enu=false) declinacion magnetica.
-        magnetic_declination_deg: -90.5
 
     joystick:
       cruise_linear_m_s: 0.3
