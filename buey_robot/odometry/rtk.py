@@ -15,6 +15,7 @@ import math
 
 from buey_robot.adapters.mqtt.client import get_client
 from buey_robot.adapters.mqtt.inputs.positions import MqttPositionsInput
+from buey_robot.adapters.mqtt.outputs.position import MqttPositionOutput
 from buey_robot.utils.config import load_config, require_key
 from buey_robot.utils.math import angle_normalize
 from buey_robot.utils.filters import MovingAverageFilter, ExponentialFilter
@@ -36,6 +37,7 @@ class RTKOdometry(Node):
         self.declare_parameter('gps.heading.filter_alpha', Parameter.Type.DOUBLE)
         self.declare_parameter('gps.imu.use_imu_heading', Parameter.Type.BOOL)
         self.declare_parameter('gps.imu.heading_topic', Parameter.Type.STRING)
+        self.declare_parameter('gps.antenna.offset_x_m', Parameter.Type.DOUBLE)
         self.declare_parameter('gps.frame_id', Parameter.Type.STRING)
 
         self.auto_set_origin = self.get_parameter('gps.origin.auto_set').value
@@ -48,6 +50,7 @@ class RTKOdometry(Node):
         self.heading_alpha = self.get_parameter('gps.heading.filter_alpha').value
         self.use_imu_heading = self.get_parameter('gps.imu.use_imu_heading').value
         self.imu_heading_topic = self.get_parameter('gps.imu.heading_topic').value
+        self.antenna_offset_x = self.get_parameter('gps.antenna.offset_x_m').value
         self.frame_id = self.get_parameter('gps.frame_id').value
 
         # Conversor GPS y filtros
@@ -86,6 +89,7 @@ class RTKOdometry(Node):
         # Cuando use_mqtt_base=true, el origen ENU lo fija la BASE publicada por
         # el dashboard (repetible entre corridas) en vez del primer fix GPS.
         self._positions_input = None
+        self._position_output = None
         if self.use_mqtt_base:
             mqtt_cfg = load_config('mqtt.yaml')
             mqtt = get_client(mqtt_cfg, logger=self.get_logger())
@@ -95,9 +99,12 @@ class RTKOdometry(Node):
             }
             self._positions_input = MqttPositionsInput(
                 mqtt, on_base=self._on_base, on_start=lambda d: None, topics=topics)
+            # Publicar el CENTRO (ya con lever-arm) en lat/lon para el mapa.
+            self._position_output = MqttPositionOutput(mqtt, mqtt_cfg)
 
         self.get_logger().info('RTK Odometry iniciado')
         self.get_logger().info(f'  Min sats: {self.min_satellites}, Require RTK: {self.require_rtk}')
+        self.get_logger().info(f'  Antena lever-arm: {self.antenna_offset_x:.2f}m adelante del centro')
         if self.use_mqtt_base:
             self.get_logger().info('  Origen: BASE MQTT (esperando bueyuy/positions/base)')
 
@@ -137,6 +144,14 @@ class RTKOdometry(Node):
             return
 
         x, y = self.gps_converter.gps_to_local(msg.latitude, msg.longitude)
+
+        # Lever-arm de la antena: la antena esta antenna_offset_x ADELANTE del centro
+        # del robot (montada en la trompa). Trasladamos la posicion al centro restando
+        # el offset en la direccion del heading (mismo patron que camera.offset_x_m en
+        # zed.py). Sin heading todavia (arranque), se usa la posicion de la antena.
+        if self.antenna_offset_x != 0.0 and self.current_heading is not None:
+            x -= self.antenna_offset_x * math.cos(self.current_heading)
+            y -= self.antenna_offset_x * math.sin(self.current_heading)
 
         if self.filter_enabled and self.x_filter and self.y_filter:
             x = self.x_filter.update(x)
@@ -200,6 +215,13 @@ class RTKOdometry(Node):
         msg.twist.twist.linear.x = self.current_speed
 
         self.odom_filtered_pub.publish(msg)
+
+        # Publicar el CENTRO en lat/lon para el mapa de la telemetria: esquinas
+        # limpias en los giros (el centro casi no se mueve al girar en el lugar),
+        # sin las "narices" de la antena cruda de rtk/location/json.
+        if self._position_output is not None and self.gps_converter.origin_set:
+            lat, lon = self.gps_converter.local_to_gps(self.current_x, self.current_y)
+            self._position_output.send(lat, lon)
 
 
 def main(args=None):

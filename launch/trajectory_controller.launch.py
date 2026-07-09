@@ -32,7 +32,6 @@ def generate_launch_description():
     default_waypoints = os.path.join(pkg_share, 'waypoints', 'rectangulo_local.yaml')
 
     nav_yaml = os.path.join(pkg_share, 'config', 'navigation.yaml')
-    nav_outdoor_yaml = os.path.join(pkg_share, 'config', 'navigation_outdoor.yaml')
     motor_yaml = os.path.join(pkg_share, 'config', 'motor.yaml')
 
     waypoints_arg = DeclareLaunchArgument(
@@ -41,9 +40,9 @@ def generate_launch_description():
         description='Ruta al YAML de waypoints x,y locales (solo si goal_source=waypoints_file)'
     )
 
-    # navigation_outdoor.yaml fija goal_source=mqtt_waypoints: la ruta lat/lon llega
-    # por MQTT (bueyuy/waypoints) y se fija al origen BASE. Para navegar un YAML local
-    # x,y relativo al arranque:
+    # navigation.yaml fija goal_source=mqtt_waypoints: la ruta lat/lon llega por MQTT
+    # (bueyuy/waypoints) y se fija al origen BASE. Para navegar un YAML local x,y
+    # relativo al arranque:
     #   ros2 launch ... goal_source:=waypoints_file waypoints_file:=/ruta/local.yaml
     goal_source_arg = DeclareLaunchArgument(
         'goal_source',
@@ -58,7 +57,6 @@ def generate_launch_description():
         output='screen',
         parameters=[
             nav_yaml,
-            nav_outdoor_yaml,
             motor_yaml,
             {
                 'auto_load_waypoints': LaunchConfiguration('waypoints_file'),

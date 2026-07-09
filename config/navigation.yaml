@@ -1,88 +1,68 @@
+# UNICO yaml de navegacion. Valores OUTDOOR (RTK) aplicados directo (ya no hay
+# navigation_outdoor.yaml/navigation_indoor.yaml ni merge). Estamos trabajando
+# outdoor: si algun dia se vuelve a indoor (ZED), re-tunear (sobre todo bajar
+# wait_for_gyro_calibration/trigger_gyro_calibration a false: ZED no tiene gyro).
 /**:
   ros__parameters:
-    # Default vacio — el launch lo sobreescribe con LaunchConfiguration('waypoints_file').
-    # Sirve como fallback si alguien levanta el controller con `ros2 run` directo.
-    auto_load_waypoints: ""
-
-    # Fuente de la meta: "waypoints_file" (YAML local x,y, relativo al arranque —
-    # usado indoor) o "mqtt_waypoints" (ruta lat/lon por MQTT, origen=BASE — usado
-    # outdoor, lo setea navigation_outdoor.yaml).
-    goal_source: "waypoints_file"
+    auto_load_waypoints: ""                # ruta YAML local; el launch la sobreescribe (solo si goal_source=waypoints_file)
+    goal_source: "mqtt_waypoints"          # origen de la meta: ruta lat/lon por MQTT (bueyuy/waypoints), fijada a la BASE
 
     controller:
-      frequency_hz: 10.0
-      mode: "no-arc"
+      frequency_hz: 10.0                   # Hz del lazo de control
+      mode: "no-arc"                       # no-arc = stop_and_turn (para/gira/avanza); "arc" = curvas suaves (indoor)
       goal:
-        position_tolerance_m: 0.5
-        alignment_tolerance_deg: 5.0
+        position_tolerance_m: 0.5          # m: distancia al WP para darlo por alcanzado y pasar al siguiente
+        alignment_tolerance_deg: 10.0      # grados: error de rumbo maximo antes de dejar de girar y avanzar
       velocity:
-        cruise_linear_m_s: 0.3
-        min_linear_m_s: 0.15
-        cruise_angular_rad_s: 0.4
-        max_angular_rad_s: 0.6
+        cruise_linear_m_s: 0.3             # m/s: velocidad lineal de crucero
+        min_linear_m_s: 0.20               # m/s: velocidad lineal minima (no arrastrarse -> mantiene COG util)
+        cruise_angular_rad_s: 0.4          # rad/s: velocidad de giro al alinear
+        max_angular_rad_s: 0.6             # rad/s: tope de velocidad angular
       angular:
-        proportional_gain: 0.8
+        proportional_gain: 0.5             # ganancia P de correccion de rumbo en recta (bajo = suave ante ruido)
       deceleration:
-        distance_m: 2.0
+        distance_m: 2.0                    # m: distancia al WP donde empieza a desacelerar
       ramp:
-        accel_rate_linear: 0.015
-        decel_rate_linear: 0.03
-        accel_rate_angular: 0.03
-        decel_rate_angular: 0.03
-      arc:
-        linear_m_s: 0.233
-        angular_rad_s: 0.302
-        start_distance_m: 1.3
-      # Creep recto inicial antes de navegar: avanza en linea recta para generar
-      # COG y que el heading fused (gyro+GPS, nodo mpu6050_gyro) se alinee. Sin
-      # esto el robot rota en el lugar con un heading todavia sin alinear.
-      # OJO: el warm-up del offset necesita ~offset_init_samples fixes GPS (1 Hz);
-      # a crucero ~0.28 m/s, 0.5m da ~2 fixes. Si el heading no alcanza a alinear,
-      # subir distance_m (~1.5m para 5 fixes) o bajar offset_init_samples (imu.yaml).
+        accel_rate_linear: 0.015           # rampa: aceleracion lineal por tick
+        decel_rate_linear: 0.03            # rampa: desaceleracion lineal por tick
+        accel_rate_angular: 0.03           # rampa: aceleracion angular por tick
+        decel_rate_angular: 0.03           # rampa: desaceleracion angular por tick
+      arc:                                 # (solo si mode: arc)
+        linear_m_s: 0.233                  # m/s: velocidad lineal durante el arco
+        angular_rad_s: 0.302               # rad/s: velocidad angular durante el arco
+        start_distance_m: 1.3              # m: distancia al WP donde arranca el arco (recorta la esquina)
       prealign:
-        enabled: true
-        distance_m: 1.0             # minimo a avanzar recto antes de poder navegar
-        # require_fused_convergence: no soltar la nav solo por avanzar distance_m;
-        # ademas esperar /heading/fused_ready (offset gyro->GPS convergido). false en
-        # base (indoor/ZED no tiene ese heading); navigation_outdoor.yaml lo pone true.
-        require_fused_convergence: false
-        max_distance_m: 3.0         # tope del creep si la convergencia nunca llega
-      # Esperar a que mpu6050_gyro termine el auto-bias (robot quieto) antes de
-      # moverse. false por defecto (indoor/ZED no tiene gyro -> no colgar);
-      # navigation_outdoor.yaml lo pone en true.
-      wait_for_gyro_calibration: false
-      # Disparar una calibracion fresca del gyro al arrancar la navegacion (publica
-      # /gyro/calibrate y espera el /heading/gyro recalibrado). false en base
-      # (indoor); navigation_outdoor.yaml lo pone en true. Va de la mano con
-      # wait_for_gyro_calibration (se dispara y se espera).
-      trigger_gyro_calibration: false
+        enabled: true                      # creep recto inicial antes de navegar (genera COG, alinea el heading fused)
+        distance_m: 1.0                    # m: minimo a avanzar recto antes de poder navegar
+        require_fused_convergence: true    # no soltar la nav hasta que converja el heading fused (/heading/fused_ready)
+        max_distance_m: 3.0                # m: tope del creep si la convergencia nunca llega
+      wait_for_gyro_calibration: true      # robot quieto hasta que el gyro termine su auto-bias
+      trigger_gyro_calibration: true       # recalibrar el gyro fresco al arrancar la nav (robot recien parado en el inicio)
 
     odometry:
-      topic: "/zed/zed_node/odom"   # topic ZED; en outdoor_rtk se ignora (rtk.py suscribe /gps/fix)
+      topic: "/zed/zed_node/odom"          # topic odometria ZED (solo indoor; outdoor lo ignora, rtk usa /gps/fix)
 
     camera:
-      offset_x_m: 0.875             # compensacion camara ZED al centro del robot
+      offset_x_m: 0.875                    # m: offset camara ZED al centro del robot (solo indoor)
 
-    # Parametros de heading para odometry/rtk.py
     gps:
+      origin:
+        use_mqtt_base: true                # origen ENU = BASE del dashboard (repetible; va junto a goal_source mqtt_waypoints)
       heading:
-        min_movement_threshold: 0.1 # movimiento minimo para el heading GPS-only (m)
-        filter_alpha: 0.15          # suavizado exponencial del heading GPS
+        min_movement_threshold: 0.25       # m/s: por debajo de esto congela el ultimo heading bueno (evita ruido RTK)
+        filter_alpha: 0.15                 # suavizado exponencial del heading GPS
       imu:
-        # use_imu_heading=true: rtk adopta /heading/fused (gyro + COG GPS, ya en yaw
-        # ENU, lo publica mpu6050_gyro) directo como current_heading. false: rtk cae
-        # al heading del COG del GPS (sin IMU). La brujula LSM303 fue removida.
-        use_imu_heading: true
-        heading_topic: "/heading/fused"
+        use_imu_heading: true              # rtk adopta /heading/fused (gyro+COG GPS) como heading; false = solo COG GPS
+        heading_topic: "/heading/fused"    # topic del heading que consume rtk
 
     joystick:
-      cruise_linear_m_s: 0.3
-      cruise_angular_rad_s: 0.5
-      max_angular_rad_s: 0.6
-      frequency_hz: 10.0
-      timeout_ms: 600.0
+      cruise_linear_m_s: 0.3               # m/s: velocidad lineal del joystick
+      cruise_angular_rad_s: 0.5            # rad/s: velocidad de giro del joystick
+      max_angular_rad_s: 0.6               # rad/s: tope angular del joystick
+      frequency_hz: 10.0                   # Hz del lazo de joystick
+      timeout_ms: 600.0                    # ms: sin comando joystick por este tiempo -> cede a la nav autonoma
       ramp:
-        accel_rate_linear: 0.03
-        decel_rate_linear: 0.03
-        accel_rate_angular: 0.03
-        decel_rate_angular: 0.03
+        accel_rate_linear: 0.03            # rampa joystick: aceleracion lineal
+        decel_rate_linear: 0.03            # rampa joystick: desaceleracion lineal
+        accel_rate_angular: 0.03           # rampa joystick: aceleracion angular
+        decel_rate_angular: 0.03           # rampa joystick: desaceleracion angular
