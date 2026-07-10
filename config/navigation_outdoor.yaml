@@ -1,0 +1,65 @@
+# Override del navigation.yaml para modo outdoor (RTK).
+# Solo poner aca los parametros que difieren del default.
+# ROS2 mergea los YAMLs en orden: navigation.yaml primero, este despues.
+
+/**:
+  ros__parameters:
+    # La ruta de waypoints (lat/lon) llega por MQTT desde el dashboard
+    # (bueyuy/waypoints) y se fija al origen BASE. Para volver a un YAML local x,y:
+    # goal_source: "waypoints_file" (default base).
+    goal_source: "mqtt_waypoints"
+
+    # --- Tuning anti-zigzag (test linea recta, 2026-05-29) ---
+    # Con heading derivado SOLO de GPS (IMU fake = heading fijo, inutil), a baja
+    # velocidad el ruido RTK (~1-2cm) domina el delta de posicion y el heading
+    # enloquece. Esto disparaba el stop-turn-stutter de FINAL_APPROACH (42s, 9
+    # re-alineaciones para los ultimos 1.3m). Mitigacion:
+    controller:
+      # Robot quieto hasta que el gyro (mpu6050_gyro) termine su auto-bias, y
+      # recien ahi navegar (evita mover el robot durante la calibracion). Con la
+      # deteccion de gyro-vivo (imu.yaml gyro_alive_min_std), si el gyro no reporta
+      # el auto-bias no completa y el robot queda bloqueado en vez de navegar ciego.
+      wait_for_gyro_calibration: true
+      # Recalibrar el gyro FRESCO al arrancar la navegacion (robot recien parado en
+      # el inicio), en vez de usar el auto-bias que hizo mpu6050_gyro al levantar
+      # outdoor_rtk (que pudo quedar viejo tras mover el robot con el joystick).
+      trigger_gyro_calibration: true
+      prealign:
+        # Endurecer el arranque: el creep recto no termina hasta que el heading fused
+        # convergio (/heading/fused_ready). Sin esto el robot salia diagonal (~127 deg
+        # de desfase inicial, offset sin alinear en toda la corrida).
+        require_fused_convergence: true
+      goal:
+        # Aflojar alineacion: el re-trigger de FINAL_APPROACH es 2x este valor,
+        # antes 10deg->re-align a 20deg (constantemente violado por ruido heading).
+        alignment_tolerance_deg: 25.0
+      velocity:
+        # No arrastrarse tan lento al final: mantiene el heading GPS con señal real.
+        min_linear_m_s: 0.20
+      angular:
+        # Suavizar la correccion proporcional ante heading ruidoso.
+        proportional_gain: 0.5
+
+    gps:
+      origin:
+        use_mqtt_base: true   # el origen ENU = BASE (debe ir junto a goal_source)
+      heading:
+        # Congelar el ultimo heading bueno por debajo de esta velocidad en vez de
+        # recalcular desde ruido. Lo lee rtk.py (odometry) -> requiere reiniciar
+        # outdoor_rtk.launch.py, no solo el controller.
+        min_movement_threshold: 0.25
+
+# Ejemplos tipicos a ajustar (descomentar y ajustar valores):
+#
+# /**:
+#   ros__parameters:
+#     controller:
+#       velocity:
+#         cruise_linear_m_s: 0.5
+#         max_angular_rad_s: 0.8
+#       goal:
+#         position_tolerance_m: 0.8  # mas tolerante en exterior
+#     gps:
+#       quality:
+#         min_satellites: 10
+#         require_rtk_fix: true

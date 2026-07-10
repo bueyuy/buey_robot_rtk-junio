@@ -28,7 +28,7 @@ acumulada **358°** sobre las 4 vueltas (ideal 360°), drift en reposo **~0.012 
 
 ## 2. Firmware dual (dato clave)
 
-El firmware micro-ROS que corre en la ESP32 (`/dev/ttyUSB0`, agente en `nav_outdoor.launch`)
+El firmware micro-ROS que corre en la ESP32 (`/dev/ttyUSB0`, agente en `outdoor_rtk.launch`)
 es un nodo **DUAL** llamado `esp32_dual_imu_node`. Publica las **dos** IMUs:
 
 | Tópico | Sensor | Contenido | Uso |
@@ -159,20 +159,19 @@ el joystick); solo la numeración va al revés por la convención.
 Contrato del payload (retained): `{"waypoints_gps": [{"lat","lon"}, ...], "loop": bool}`.
 
 - Waypoints en **lat/lon absolutos**.
-- Se convierten a local con el **origen automático** que publica `rtk.py` (primer fix GPS,
-  `bueyuy/odom/origin`), mismo `GPSConverter`/frame que `/odom_filtered`. Ya **no** hay BASE
-  marcada desde el dashboard (era una prueba anterior, BASE→START).
-- **Quedan FIJOS** a su posición GPS geográfica.
+- Se convierten a local con el origen **BASE** (mismo `GPSConverter` y frame que `rtk.py` /
+  `/odom_filtered`), reusando `gps_to_local`.
+- **Quedan FIJOS** a su posición GPS: no se desplazan si el robot arranca corrido.
 - `loop: true` recorre la ruta en bucle (al llegar al último waypoint vuelve al primero).
 
 | | `waypoints_file` (local, indoor) | `mqtt_waypoints` (outdoor) |
 |---|---|---|
 | Fuente | YAML `x, y` metros | MQTT `bueyuy/waypoints` (lat/lon) |
-| Origen | arranque del robot | primer fix GPS (auto, publicado por rtk) |
+| Origen | arranque del robot | BASE (fijo, = rtk) |
+| Si arranca corrido | todo se desplaza | los waypoints quedan fijos ✓ |
 
-El origen se fija con el primer fix RTK (Float sirve por default, `gps.origin.allow_float`;
-su precisión absoluta no afecta la nav, se cancela en la geometría robot↔waypoint). Sin fix
-todavía, el controller guarda la ruta y la carga cuando llega el origen.
+Requiere `use_mqtt_base: true` + BASE publicada por el dashboard. Sin BASE, el controller
+guarda la ruta y la carga al llegar la BASE.
 
 ### Creep recto inicial (`controller.prealign`)
 
@@ -187,7 +186,7 @@ COG y alinear el heading fused, y recién después navega.
 
 ### Calibración del gyro disparada desde la navegación (`trigger_gyro_calibration` + `wait_for_gyro_calibration`)
 
-La calibración del gyro se dispara **al arrancar la navegación**, no al levantar el stack.
+La calibración del gyro se dispara **al arrancar la navegación**, no al levantar `outdoor_rtk`.
 El robot está recién parado y quieto en el punto de inicio → el bias sale fresco. El controller
 publica `/gyro/calibrate` (std_msgs/Empty); `mpu6050_gyro` re-corre el auto-bias (y reinicia la
 fusión GPS), dejando de publicar `/heading/gyro` mientras recalibra. El controller espera a que
@@ -266,21 +265,19 @@ durante la captura, para no hornear un bias con el robot en movimiento.
 2. **T2** — sensores + odometría + heading fused: `ros2 launch buey_robot outdoor_rtk.launch.py`
    - **Sin reset de la ESP32**: el firmware reconecta solo (máquina de estados
      micro-ROS con ping al agente). Se puede relanzar `outdoor_rtk` sin tocar el ESP32.
-   - El **origen** es automático (primer fix GPS = arranque del robot; `rtk.py` lo
-     publica en `bueyuy/odom/origin`). Ya no se marca BASE en el dashboard.
-   - Con joystick, llevar el robot al inicio y **pararlo** (quieto).
+   - Fijar la **BASE** en el dashboard (`use_mqtt_base=true` la necesita).
+   - Con joystick, llevar el robot cerca de **A** y **pararlo** (quieto).
 3. **T3** — navegación (default `goal_source:=mqtt_waypoints`):
    ```bash
    ros2 launch buey_robot trajectory_controller.launch.py
    ```
-   Cargar la ruta por MQTT (retained) y después dar el **GO**, p.ej.:
+   Publicar la ruta por MQTT (retained), p.ej.:
    ```bash
    mosquitto_pub -t bueyuy/waypoints -r -m '{"waypoints_gps":[{"lat":...,"lon":...}, ...],"loop":false}'
-   mosquitto_pub -t bueyuy/navigation/start -m ''    # GO
    ```
-   La navegación **dispara la calibración del gyro** (robot parado) → espera odom +
-   origen + el bias fresco → creep recto → navega la ruta. Mantener el robot **quieto**
-   los ~10 s del auto-bias.
+   La navegación **dispara la calibración del gyro** (robot parado en A) → espera BASE +
+   odom + el bias fresco → creep recto → navega la ruta (fija al BASE). Mantener el robot
+   **quieto** los ~10 s del auto-bias tras lanzar T3.
 
 ---
 

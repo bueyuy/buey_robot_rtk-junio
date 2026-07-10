@@ -18,8 +18,10 @@ topics:
   cmd_vel_debug: "bueyuy/navigation/cmd_vel"
   joystick: "bueyuy/navigation/joystick"
 
+  imu_calibration: "bueyuy/sensors/imu/calibration"
+
   # Estado de navegacion
-  trajectory_status: "bueyuy/navigation/status" # REVISAR
+  trajectory_status: "bueyuy/navigation/status"
   # Disparador de arranque (GO): el dashboard lo publica (NO retained) tras cargar
   # la ruta y con el robot en el inicio. El controller navega recien al recibirlo.
   nav_start: "bueyuy/navigation/start"
@@ -29,17 +31,17 @@ topics:
 
   # Waypoints (retained)
   waypoints: "bueyuy/waypoints"
-  waypoints_xy: "bueyuy/waypoints_xy"  # REVISAR
+  waypoints_xy: "bueyuy/waypoints_xy"
 
   # Configuracion del robot (retained)
-  config: "bueyuy/config"                  # REVISAR
-  config_motors: "bueyuy/config/motors"      # REVISAR
+  config: "bueyuy/config"
+  config_motors: "bueyuy/config/motors"
 
 
 
-  # GPS RTK
+  # GPS RTK (solo en outdoor_rtk)
   gps_json: "rtk/location/json"
 
-  # Origen del frame ENU (retained, lo publica rtk.py: primer fix GPS = arranque).
-  # El controller lo usa para convertir los waypoints al frame de /odom_filtered.
-  odom_origin: "bueyuy/odom/origin"
+  # Puntos de referencia (retained, los publica el dashboard)
+  positions_base: "bueyuy/positions/base"
+  positions_start: "bueyuy/positions/start"

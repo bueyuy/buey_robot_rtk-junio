@@ -4,7 +4,7 @@ Clase reutilizable (no nodo). GPSNmeaDriver la instancia y llama .send().
 Topic publicado:
   - rtk/location/json  (JSON consolidado con todo el estado GPS)
 
-Se instancia en el driver GPS (gps_nmea).
+Solo se activa en outdoor_rtk launch. En indoor_zed no se instancia.
 """
 
 import json

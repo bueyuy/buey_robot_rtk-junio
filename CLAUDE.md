@@ -18,11 +18,10 @@ buey_robot/
                    inputs/ = clases de adquisicion; outputs/ = clases o nodos de salida.
   utils/           Utilidades genericas: math, filters, gps_converter, config.
 config/            YAML como unica fuente de verdad. Cada nodo declare_parameter sin defaults.
-launch/            nav_outdoor (stack completo) y motor_gateway (drive manual).
+launch/            outdoor_rtk, indoor_zed, motor_gateway, telemetry.
+waypoints/         Archivos YAML de waypoints x,y locales (modo waypoints_file, indoor).
+                   Los waypoints GPS (lat/lon) outdoor llegan por MQTT (bueyuy/waypoints).
 docs/              Specs y notas.
-
-Los waypoints llegan SIEMPRE por MQTT (bueyuy/waypoints, lat/lon). No hay carga
-por archivo YAML.
 ```
 
 Ver `docs/scaffold.md` para el detalle de archivos y responsabilidades por capa.
@@ -48,19 +47,20 @@ Ver `docs/scaffold.md` para el detalle de archivos y responsabilidades por capa.
 
 ## Flujo de trabajo tipico (en el robot)
 
-1. Un solo launch levanta todo: `ros2 launch buey_robot nav_outdoor.launch.py`
-   (motor_gateway + sensores + odometria RTK + telemetria + trajectory_controller).
+1. Terminal 1 (siempre encendida): `ros2 launch buey_robot motor_gateway.launch.py`
+   Arranca `joystick_controller` y `motor_gateway`. El robot responde al joystick
+   remoto (MQTT) o al controller autonomo segun llegue input.
 
-2. Con el joystick remoto (MQTT), llevar el robot al inicio y pararlo (quieto).
-   El joystick tiene prioridad sobre la nav por 600ms.
+2. Llevar el robot al punto de inicio con joystick.
 
-3. Desde la telemetria (dashboard) cargar la ruta (bueyuy/waypoints, lat/lon) y dar
-   el GO (bueyuy/navigation/start). La nav es FULL RTK con geolocalizacion dinamica:
-   no hay waypoints fijos ni archivos. El origen del frame lo fija rtk (primer fix).
+3. Terminal 2: `ros2 launch buey_robot outdoor_rtk.launch.py` (o `indoor_zed`).
+   Arranca el stack autonomo (drivers + odometry + trajectory_controller + pose).
+   Publica `/cmd_vel` que el motor_gateway de T1 obedece (a menos que el joystick
+   tome prioridad por 600ms).
 
-4. Para detener: publicar ruta vacia (idle) o mover el joystick.
+4. Cuando termina la corrida: Ctrl+C en T2. T1 sigue activa.
 
-(`motor_gateway.launch.py` queda aparte por si se quiere solo drive manual.)
+5. Joystick lleva el robot de vuelta al inicio. Iterar para tunear params.
 
 ## Build
 
@@ -74,7 +74,7 @@ source install/setup.bash
 
 | Topic | Publisher | Notas |
 |---|---|---|
-| `bueyuy/telemetry/json` | `pose_publisher` | pose + headings (gyro/fused, gps) |
+| `bueyuy/telemetry/json` | `pose_publisher` | pose + 3 headings (zed, imu, gps) |
 | `bueyuy/navigation/motors` | `motor_gateway` | `"velL&velR"` al Pico |
 | `bueyuy/navigation/cmd_vel` | `motor_gateway` | `"v&w"` debug |
 | `bueyuy/navigation/status` | `trajectory_controller` | "Following WP n/m, dist=..." |
@@ -86,8 +86,8 @@ source install/setup.bash
 
 ## Notas importantes
 
-- `nav_outdoor` ya incluye `motor_gateway`; NO correr ademas `motor_gateway.launch.py`
-  aparte (evitar dos motor_gateway).
+- `motor_gateway` corre en una terminal aparte permanente; outdoor_rtk e indoor_zed
+  NO lo incluyen (evitar conflicto de dos motor_gateway).
 - `setup.py` usa `glob('launch/*.py')` y `glob('config/*.yaml')`: agregar archivos
   nuevos no requiere editar el setup.
 - Para overrides indoor/outdoor: editar `navigation_indoor.yaml` o

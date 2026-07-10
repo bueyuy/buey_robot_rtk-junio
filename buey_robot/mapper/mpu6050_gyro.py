@@ -54,7 +54,7 @@ class Mpu6050Gyro(Node):
         # Topic para disparar una recalibracion on-demand (std_msgs/Empty). Lo usa el
         # controller para recalibrar el bias al arrancar la navegacion (robot recien
         # parado y quieto en el inicio), en vez de depender de la calibracion que se
-        # hizo al levantar el stack.
+        # hizo al levantar outdoor_rtk.
         self.declare_parameter('calibrate_topic', Parameter.Type.STRING)
         # Deteccion de gyro muerto/congelado: un MPU6050 vivo siempre tiene ruido
         # (std del wz en reposo > 0); un topic equivocado (LSM303, sin gyro) o un
@@ -199,21 +199,15 @@ class Mpu6050Gyro(Node):
 
         self.heading_pub.publish(Float32(data=float(self.heading_deg)))
 
-        if self.gps_fusion:
-            # Flecha del gyro para el dashboard, en convencion ENU (0=Este, antihorario)
-            # = heading + offset. MISMA convencion que /heading/fused (que en el
-            # dashboard se ve bien): NO aplicar 90-x, que invierte el sentido de giro.
-            # Se publica SIEMPRE, con el offset del COG en cuanto existe:
-            #  - antes del primer COG (offset None): rota bien pero con cero arbitrario.
-            #  - con offset fijado: alineada al COG (== /heading/fused).
-            offset = self._gps_offset if self._gps_offset is not None else 0.0
-            gyro_arrow = (self.heading_deg + offset) % 360.0
-            self.gyro_compass_pub.publish(Float32(data=float(gyro_arrow)))
-
-            # Heading fusionado ENU (el que usa rtk/odom): solo cuando hay offset.
-            if self._gps_offset is not None:
-                fused = (self.heading_deg + self._gps_offset) % 360.0
-                self.fused_pub.publish(Float32(data=float(fused)))
+        # Heading fusionado: gyro + offset GPS (absoluto ENU, sin drift). Solo
+        # una vez que el GPS fijo el offset al menos una vez.
+        if self.gps_fusion and self._gps_offset is not None:
+            fused = (self.heading_deg + self._gps_offset) % 360.0
+            self.fused_pub.publish(Float32(data=float(fused)))
+            # Mismo heading en convencion BRUJULA (0=Norte, horario), alineado al COG:
+            # (90 - fused). Yendo derecho == COG del GPS -> la flecha no queda defasada.
+            gyro_compass = (90.0 - fused) % 360.0
+            self.gyro_compass_pub.publish(Float32(data=float(gyro_compass)))
 
         self._publish_calibrated(msg)
 

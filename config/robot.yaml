@@ -1,25 +1,16 @@
-/**:
-  ros__parameters:
-    robot:
-      # Geometria fisica del robot
-      dimensions:
-        wheelbase: 0.8              # metros, distancia entre ejes
+robot:
+  # Geometria fisica del robot
+  dimensions:
+    wheelbase: 0.8              # metros, distancia entre ejes
 
-      # Antena GPS rover: montada offset_x_m ADELANTE del centro del robot (en la
-      # trompa). El driver gps_nmea traslada la posicion al centro usando el heading,
-      # antes de publicar /gps/fix y rtk/location/json -> UNA sola ubicacion (centro),
-      # no una cruda y una corregida. Positivo = adelante; 0 = antena ya en el centro.
-      antenna:
-        offset_x_m: 0.40
+  # Frames TF
+  frames:
+    map_frame: "map"
+    base_frame: "base_link"
+    gps_frame: "gps_link"
+    imu_frame: "imu_link"
 
-      # Frames TF
-      frames:
-        map_frame: "map"
-        base_frame: "base_link"
-        gps_frame: "gps_link"
-        imu_frame: "imu_link"
-
-      # Safety
-      safety:
-        watchdog_timeout_s: 0.5     # segundos sin cmd_vel -> auto-stop
-        emergency_stop_decel: 2.0   # desaceleracion de emergencia (m/s^2)
+  # Safety
+  safety:
+    watchdog_timeout_s: 0.5     # segundos sin cmd_vel -> auto-stop
+    emergency_stop_decel: 2.0   # desaceleracion de emergencia (m/s^2)

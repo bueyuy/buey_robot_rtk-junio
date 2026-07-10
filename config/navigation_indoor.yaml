@@ -1,0 +1,13 @@
+# Override del navigation.yaml para modo indoor (ZED).
+# Solo poner aca los parametros que difieren del default.
+# ROS2 mergea los YAMLs en orden: navigation.yaml primero, este despues.
+# Ejemplos tipicos a ajustar (descomentar y ajustar valores):
+#
+# /**:
+#   ros__parameters:
+#     controller:
+#       velocity:
+#         cruise_linear_m_s: 0.2     # mas conservador indoor
+#         max_angular_rad_s: 0.4
+#       goal:
+#         position_tolerance_m: 0.3  # mas estricto en espacio reducido

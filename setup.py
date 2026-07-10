@@ -14,12 +14,13 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+        (os.path.join('share', package_name, 'waypoints'), glob('waypoints/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='User',
     maintainer_email='user@todo.todo',
-    description='Robot Buey V RTK - navegacion autonoma outdoor (GPS RTK), arquitectura por capas',
+    description='Robot Buey V RTK - navegacion autonoma con ZED/RTK, arquitectura por capas',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
@@ -29,6 +30,7 @@ setup(
             'joystick_controller = buey_robot.navigation.joystick:main',
 
             # Odometry
+            'zed_odometry = buey_robot.odometry.zed:main',
             'rtk_odometry = buey_robot.odometry.rtk:main',
 
             # Sensores (drivers de hardware)

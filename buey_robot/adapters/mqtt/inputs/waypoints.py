@@ -11,7 +11,7 @@ guardada. Payload (JSON):
 bucle (al llegar al ultimo waypoint vuelve al primero) en vez de terminar.
 
 lat/lon es la fuente de verdad: el consumidor convierte a x/y localmente con el
-origen que publica rtk.py (primer fix GPS, via inputs/origin.py), para que la ruta
+origen (BASE) activo, igual que START (ver inputs/positions.py), para que la ruta
 caiga en el mismo frame que /odom_filtered.
 """
 

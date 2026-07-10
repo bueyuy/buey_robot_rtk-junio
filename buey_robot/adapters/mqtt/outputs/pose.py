@@ -10,7 +10,7 @@ Suscribe:
   - /odom_filtered (Odometry) -- posicion y heading (yaw del quaternion)
 
 El heading sale del quaternion de /odom_filtered, que ya viene fusionado por la
-fuente de odometria (rtk.py). Asi pose.py no depende de los topics
+fuente de odometria (rtk.py o zed.py). Asi pose.py no depende de los topics
 /heading/* (rtk ya no los publica: solo emite /odom_filtered). Para comparar los
 headings (gyro crudo vs fused vs GPS), ver imu_bridge (bueyuy/heading/*).
 

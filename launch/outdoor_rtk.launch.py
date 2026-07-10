@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Launch outdoor con GPS RTK + IMU: sensores, odometria y telemetria.
+
+NO incluye el trajectory_controller (ver trajectory_controller.launch.py).
+Asi se puede reportar RTK / IMU / telemetria MQTT y fijar BASE/START en el
+dashboard sin que el robot intente navegar.
+
+Nodos:
+  - micro_ros_agent           (agente microROS serial -> IMU publica /mpu6050/imu/data)
+  - mapper/gps_nmea.py        (serial NMEA -> /gps/fix + rtk/location/json)
+  - mapper/mpu6050_gyro.py    (/mpu6050/imu/data crudo -> bias gyro + /heading/gyro + /heading/fused)
+  - odometry/rtk.py           (GPS + heading fused -> /odom_filtered)
+  - adapters/mqtt/outputs/pose.py  (telemetry MQTT, incluye heading_gps)
+
+La IMU la publica microROS en /mpu6050/imu/data (sensor_msgs/Imu); su agente se
+levanta desde este launch (ros2 run micro_ros_agent ... serial --dev /dev/ttyUSB0).
+
+motor_gateway NO se incluye — corre en terminal aparte con motor_gateway.launch.py.
+Para navegacion autonoma, lanzar ademas trajectory_controller.launch.py.
+
+Uso:
+  ros2 launch buey_robot outdoor_rtk.launch.py
+"""
+
+from launch import LaunchDescription
+from launch_ros.actions import Node
+from launch.actions import TimerAction, ExecuteProcess
+from ament_index_python.packages import get_package_share_directory
+import os
+
+
+def generate_launch_description():
+    pkg_share = get_package_share_directory('buey_robot')
+
+    nav_yaml = os.path.join(pkg_share, 'config', 'navigation.yaml')
+    nav_outdoor_yaml = os.path.join(pkg_share, 'config', 'navigation_outdoor.yaml')
+    sensors_yaml = os.path.join(pkg_share, 'config', 'sensors.yaml')
+    imu_yaml = os.path.join(pkg_share, 'config', 'imu.yaml')
+
+    # Agente microROS de la IMU: publica /imu/data desde la placa via serial.
+    # Antes corria en terminal aparte; ahora se levanta desde este launch.
+    micro_ros_agent = ExecuteProcess(
+        cmd=[
+            'ros2', 'run', 'micro_ros_agent', 'micro_ros_agent',
+            'serial', '--dev', '/dev/ttyUSB0', '-b', '115200', '-v6',
+        ],
+        output='log',  # logs del agente van a ~/.ros/log/, no ensucian la consola
+    )
+
+    # Driver GPS NMEA (serial)
+    gps_node = Node(
+        package='buey_robot',
+        executable='gps_nmea_driver',
+        name='gps_nmea_driver',
+        output='screen',
+        parameters=[sensors_yaml],
+    )
+
+    # Gyro MPU6050: /mpu6050/imu/data (crudo) -> bias + /heading/gyro + /heading/fused
+    mpu6050_gyro_node = Node(
+        package='buey_robot',
+        executable='mpu6050_gyro',
+        name='mpu6050_gyro',
+        output='screen',
+        parameters=[imu_yaml],
+    )
+
+    # Bridge MQTT de IMU/heading/odom para el panel de telemetria
+    imu_bridge_node = Node(
+        package='buey_robot',
+        executable='imu_bridge',
+        name='imu_bridge',
+        output='screen',
+    )
+
+    # Odometria RTK: recibe GPS params via ROS2 desde navigation.yaml + sensors.yaml
+    rtk_odom_node = Node(
+        package='buey_robot',
+        executable='rtk_odometry',
+        name='rtk_odometry',
+        output='screen',
+        parameters=[
+            sensors_yaml,
+            nav_yaml,
+            nav_outdoor_yaml,
+        ],
+    )
+
+    # Telemetria MQTT consolidada
+    pose_node = Node(
+        package='buey_robot',
+        executable='pose_publisher',
+        name='pose_publisher',
+        output='screen',
+    )
+
+    # Sensores arrancan primero, odometria y telemetria con delay de 2s
+    delayed_nodes = TimerAction(
+        period=2.0,
+        actions=[
+            rtk_odom_node,
+            pose_node,
+            imu_bridge_node,
+        ]
+    )
+
+    return LaunchDescription([
+        micro_ros_agent,
+        gps_node,
+        mpu6050_gyro_node,
+        delayed_nodes,
+    ])
