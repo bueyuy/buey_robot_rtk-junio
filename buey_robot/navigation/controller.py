@@ -147,6 +147,9 @@ class TrajectoryController(Node, ArcStateMixin):
         self.status_output = MqttStatusOutput(self._mqtt, mqtt_cfg)
         self.config_output = MqttConfigOutput(self._mqtt, mqtt_cfg)
         self.waypoints_output = MqttWaypointsOutput(self._mqtt, mqtt_cfg)
+        # Ultimo status; el heartbeat (~1Hz) lo republica para que el dashboard lo
+        # vea 'fresco' (navFresh: exige refresco cada <3s o bloquea el GO).
+        self._last_status = 'Idle (sin ruta)'
 
         # Origen del frame local (ENU), fijado por la BASE del dashboard (mismo que
         # rtk.py), para convertir waypoints lat/lon al frame de /odom_filtered.
@@ -221,6 +224,10 @@ class TrajectoryController(Node, ArcStateMixin):
 
         # Timers
         self.create_timer(1.0 / self.frequency, self.control_loop)
+        # Heartbeat del status a MQTT (~1Hz): el dashboard exige que
+        # bueyuy/navigation/status se refresque cada <3s (navFresh), si no bloquea
+        # el GO. Republica el ultimo status aunque el estado no cambie.
+        self.create_timer(1.0, self._status_heartbeat)
 
         self.auto_load_attempted = False
         if self.goal_source == 'mqtt_waypoints':
@@ -443,7 +450,7 @@ class TrajectoryController(Node, ArcStateMixin):
         self.trajectory_active = True
         self.aligning = False
         self.get_logger().info('GO recibido — recalibrando gyro + creep antes de navegar la ruta')
-        self._publish_status('GO — recalibrando + alineando')
+        self._publish_status('navegando — recalibrando + alineando')
 
     def control_loop(self):
         if self.current_x is None or self.current_y is None:
@@ -483,7 +490,7 @@ class TrajectoryController(Node, ArcStateMixin):
         # cualquier movimiento. Hasta el primer /heading/gyro el robot no se mueve.
         if not self._gyro_calibrated:
             self._publish_stop()
-            self._publish_status('Esperando calibracion del gyro (robot quieto)...')
+            self._publish_status('navegando — calibrando gyro (robot quieto)...')
             return
 
         # Creep recto inicial: antes de rotar/navegar, avanzar en linea recta para
@@ -539,7 +546,7 @@ class TrajectoryController(Node, ArcStateMixin):
         self._publish_velocity(linear_vel, 0.0)  # recto: sin componente angular
         conv = 'OK' if self._fused_converged else 'esperando'
         self._publish_status(
-            f'Pre-align recto {traveled:.2f}m (min {self.prealign_distance:.2f}, '
+            f'navegando — pre-align recto {traveled:.2f}m (min {self.prealign_distance:.2f}, '
             f'max {self.prealign_max_distance:.2f}) fused={conv}')
 
     def _control_stop_and_turn(self, goal_x: float, goal_y: float):
@@ -557,7 +564,7 @@ class TrajectoryController(Node, ArcStateMixin):
                 angular_vel = math.copysign(self.cruise_angular, heading_error)
                 self._publish_velocity(0.0, angular_vel)
                 self._publish_status(
-                    f'Aligning to WP {self.wp_manager.progress_string()}, '
+                    f'navegando — alineando WP {self.wp_manager.progress_string()}, '
                     f'heading_err={math.degrees(heading_error):.1f} deg')
                 return
 
@@ -590,7 +597,7 @@ class TrajectoryController(Node, ArcStateMixin):
 
         self._publish_velocity(linear_vel, angular_vel)
         self._publish_status(
-            f'Following WP {self.wp_manager.progress_string()}, '
+            f'navegando — WP {self.wp_manager.progress_string()}, '
             f'dist={distance:.2f}m, heading_err={math.degrees(heading_error):.1f} deg')
 
     def _publish_velocity(self, linear: float, angular: float):
@@ -603,10 +610,20 @@ class TrajectoryController(Node, ArcStateMixin):
         self.cmd_vel_pub.publish(Twist())
 
     def _publish_status(self, status: str):
+        self._last_status = status
         msg = String()
         msg.data = status
         self.status_pub.publish(msg)
         self.status_output.send(status)
+
+    def _status_heartbeat(self):
+        """Republica el ultimo status a bueyuy/navigation/status ~1Hz (heartbeat).
+
+        El dashboard marca el status 'stale' y bloquea el GO si no se refresca cada
+        <3s (navFresh). Retained solo cubre la reconexion, no el heartbeat. Asi el
+        'Ruta cargada — esperando GO' se mantiene vivo mientras se espera el GO.
+        """
+        self.status_output.send(self._last_status)
 
 
 def main(args=None):
