@@ -22,11 +22,14 @@ class MqttStatusOutput:
         self.topic_status = require_key(mqtt_cfg, 'topics', 'trajectory_status')
 
     def send(self, status_str: str):
-        """Publica string de estado.
+        """Publica string de estado, RETAINED.
 
-        Formato: "Following WP n/m, dist=Xm, heading_err=Y"
+        Retained: el broker guarda el ultimo estado y lo entrega a cualquier
+        suscriptor apenas se conecta. Asi el dashboard ve el estado actual (p.ej.
+        "Ruta cargada — esperando GO") aunque se conecte/reconecte despues, sin
+        depender de haber estado escuchando en el instante exacto del cambio.
 
         Args:
             status_str: String de estado del controlador.
         """
-        self._client.publish(self.topic_status, status_str)
+        self._client.publish(self.topic_status, status_str, retain=True)
