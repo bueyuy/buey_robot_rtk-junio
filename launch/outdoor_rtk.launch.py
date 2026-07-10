@@ -24,7 +24,8 @@ Uso:
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import TimerAction, ExecuteProcess
+from launch.actions import TimerAction, ExecuteProcess, DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from ament_index_python.packages import get_package_share_directory
 import os
 
@@ -36,12 +37,22 @@ def generate_launch_description():
     sensors_yaml = os.path.join(pkg_share, 'config', 'sensors.yaml')
     imu_yaml = os.path.join(pkg_share, 'config', 'imu.yaml')
 
-    # Agente microROS de la IMU: publica /imu/data desde la placa via serial.
-    # Antes corria en terminal aparte; ahora se levanta desde este launch.
+    # Puerto serial de la ESP32 IMU (micro-ROS). Por defecto usa el by-path del
+    # puerto fisico donde esta la IMU: hay DOS CP2102 con el mismo serial (0001),
+    # asi que /dev/serial/by-id NO los distingue y /dev/ttyUSB0<->ttyUSB1 pueden
+    # intercambiarse al reiniciar. by-path es estable por puerto USB fisico.
+    # Override: ros2 launch ... outdoor_rtk.launch.py imu_dev:=/dev/ttyUSBx
+    imu_dev_arg = DeclareLaunchArgument(
+        'imu_dev',
+        default_value='/dev/serial/by-path/platform-3610000.usb-usb-0:2.1:1.0-port0',
+        description='Puerto serial de la ESP32 IMU (by-path estable; o /dev/ttyUSBx)'
+    )
+
+    # Agente microROS de la IMU: publica /mpu6050/imu/data desde la ESP32 via serial.
     micro_ros_agent = ExecuteProcess(
         cmd=[
             'ros2', 'run', 'micro_ros_agent', 'micro_ros_agent',
-            'serial', '--dev', '/dev/ttyUSB0', '-b', '115200', '-v6',
+            'serial', '--dev', LaunchConfiguration('imu_dev'), '-b', '115200', '-v6',
         ],
         output='log',  # logs del agente van a ~/.ros/log/, no ensucian la consola
     )
@@ -103,6 +114,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        imu_dev_arg,
         micro_ros_agent,
         gps_node,
         mpu6050_gyro_node,
