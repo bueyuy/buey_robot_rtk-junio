@@ -1,13 +1,15 @@
-# Guía rápida — Dual IMU (LSM303 + MPU6050) por micro-ROS + Web
+# Guía rápida — MPU6050 IMU por micro-ROS + Web
 
-Firmware en un solo ESP32 que publica:
+Firmware en un ESP32 que publica la **única IMU del robot**:
 
 | Sensor | Tópico | Contenido |
 |--------|--------|-----------|
-| LSM303 | `/imu/data` + `/imu/mag` | acelerómetro + magnetómetro |
 | MPU6050 | `/mpu6050/imu/data` | acelerómetro + giroscopio |
 
-Pines: LSM303 → `Wire` (SDA 21 / SCL 22) · MPU6050 → `Wire1` (SDA 33 / SCL 25, shield).
+El MPU6050 **no tiene magnetómetro**: el rumbo (heading) se resuelve aguas abajo
+en ROS fusionando el gyro integrado con el COG del GPS.
+
+Pines: MPU6050 → `Wire` (SDA 33 / SCL 25, shield).
 
 ---
 
@@ -86,5 +88,5 @@ Distinto de calibrar: **no** mide el bias, solo **pone el rumbo actual a 0°** a
 ### Lo que NO se arregla calibrando
 Roll y Pitch son absolutos (salen del acelerómetro = gravedad) y no derivan.
 El **yaw siempre tendrá una deriva residual lenta** porque el bias cambia con la temperatura/tiempo y
-no hay referencia absoluta de rumbo. Para eliminarla de verdad haría falta un **magnetómetro**
-(el LSM303 lo tiene → se fusionaría aguas abajo en ROS).
+el gyro no tiene referencia absoluta de rumbo. Esa deriva se corrige aguas abajo en ROS
+fusionando el gyro con el **COG del GPS** (rumbo absoluto cuando el robot avanza con RTK fix).

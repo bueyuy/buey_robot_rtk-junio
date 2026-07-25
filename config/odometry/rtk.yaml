@@ -1,0 +1,7 @@
+# Odometria RTK: origen del frame ENU (primer fix) + filtro de posicion.
+rtk_odometry:
+  ros__parameters:
+    gps.frame_id: "gps_link"              # frame_id del /odom_filtered
+    gps.origin.allow_float: true          # fijar origen con fix FLOAT (no esperar FIXED)
+    gps.filter.enabled: true              # media movil sobre la posicion
+    gps.filter.window_size: 5             # muestras de la media movil

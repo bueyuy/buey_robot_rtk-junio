@@ -25,3 +25,8 @@ def angle_diff(target: float, current: float) -> float:
         math.sin(target - current),
         math.cos(target - current)
     )
+
+
+def wrap180(deg: float) -> float:
+    """Normaliza un angulo en grados a (-180, 180]."""
+    return (deg + 180.0) % 360.0 - 180.0

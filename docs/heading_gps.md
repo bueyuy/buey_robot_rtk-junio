@@ -8,7 +8,7 @@ Es el nodo de odometria RTK (~300 lineas) que convierte `/gps/fix` en `/odom_fil
 
 2. **GPS callback** (L129-176): valida satelites y RTK fix, establece origen ENU (auto o via BASE MQTT), convierte lat/lon a coordenadas locales con `GPSConverter`, aplica filtro de media movil opcional, y calcula heading.
 
-3. **IMU callback** (L178-211): convierte heading de brujula (grados, horario desde Norte magnetico) a yaw ENU (radianes, antihorario desde Este), corrigiendo declinacion magnetica. Publica `/heading/imu` siempre; solo fusiona si `use_imu_heading=true`.
+3. **IMU callback**: adopta el heading fusionado gyro+COG GPS (`/heading/fused`, ya en yaw ENU) que publica el nodo `mpu6050_gyro`. No hay magnetometro: rtk no re-transforma ni re-fusiona, solo lo toma como `current_heading` cuando `use_imu_heading=true`.
 
 4. **Fusion heading** (L232-254): filtro complementario — parado usa solo IMU, sin IMU usa solo GPS, en movimiento mezcla con `alpha * IMU + (1-alpha) * GPS`.
 

@@ -5,8 +5,8 @@
  *   - MPU6050 -> mpu6050/imu/data (sensor_msgs/Imu, accel + gyro real)
  *
  * El giroscopio alimenta el heading fused (nodo mpu6050_gyro -> /heading/fused).
- * El LSM303 (magnetometro/brujula) fue removido: la brujula quedo inservible y el
- * heading paso a ser gyro + COG GPS, asi que ya no se publica /imu/data ni /imu/mag.
+ * El MPU6050 es la UNICA IMU del robot: no hay magnetometro. El heading se resuelve
+ * aguas abajo como gyro integrado + COG GPS (no se publica /imu/data ni /imu/mag).
  *
  * Lectura MPU6050: libreria Jeff Rowberg (I2Cdevlib) sobre Wire1 (bus 1).
  *

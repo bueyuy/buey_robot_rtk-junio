@@ -3,8 +3,9 @@
 
   - motor_gateway (joystick_controller + motor_gateway)   [drive manual + salida a motores]
   - micro_ros_agent                                        [agente serial de la IMU]
-  - mapper/gps_nmea.py        (serial NMEA -> /gps/fix + rtk/location/json)   [SENSORES]
-  - mapper/mpu6050_gyro.py    (/mpu6050/imu/data -> /heading/fused)
+  - drivers/gps_nmea.py       (serial NMEA -> /gps/fix + rtk/location/json)   [SENSORES]
+  - drivers/imu_mpu6050.py    (/mpu6050/imu/data -> /imu/heading + /imu/rate)
+  - fusion/heading.py         (/imu/heading + /gps/fix -> /heading/fused)
   - odometry/rtk.py           (GPS + heading -> /odom_filtered)
   - adapters/mqtt/outputs/pose.py + imu_bridge             [TELEMETRIA MQTT]
   - navigation/controller.py                               [NAV_CONTROLLER]
@@ -33,9 +34,11 @@ def generate_launch_description():
     pkg_share = get_package_share_directory('buey_robot')
 
     nav_yaml = os.path.join(pkg_share, 'config', 'navigation.yaml')
-    sensors_yaml = os.path.join(pkg_share, 'config', 'sensors.yaml')
     robot_yaml = os.path.join(pkg_share, 'config', 'robot.yaml')
-    imu_yaml = os.path.join(pkg_share, 'config', 'imu.yaml')
+    gps_yaml = os.path.join(pkg_share, 'config', 'drivers', 'gps_nmea.yaml')
+    imu_yaml = os.path.join(pkg_share, 'config', 'drivers', 'imu_mpu6050.yaml')
+    fusion_yaml = os.path.join(pkg_share, 'config', 'fusion', 'heading.yaml')
+    rtk_yaml = os.path.join(pkg_share, 'config', 'odometry', 'rtk.yaml')
     motor_yaml = os.path.join(pkg_share, 'config', 'motor.yaml')
 
     # --- motor_gateway (joystick + salida a motores) ---
@@ -50,20 +53,26 @@ def generate_launch_description():
         output='log',
     )
 
-    # --- SENSORES ---
+    # --- DRIVERS (especificos del modelo) ---
     gps_node = Node(  # robot.yaml aporta el lever-arm de la antena
-        package='buey_robot', executable='gps_nmea_driver', name='gps_nmea_driver',
-        output='screen', parameters=[sensors_yaml, robot_yaml],
+        package='buey_robot', executable='gps_nmea', name='gps_nmea',
+        output='screen', parameters=[gps_yaml, robot_yaml],
     )
-    mpu6050_gyro_node = Node(
-        package='buey_robot', executable='mpu6050_gyro', name='mpu6050_gyro',
+    imu_node = Node(
+        package='buey_robot', executable='imu_mpu6050', name='imu_mpu6050',
         output='screen', parameters=[imu_yaml],
+    )
+
+    # --- FUSION (agnostica): /imu/heading + /gps/fix -> /heading/fused ---
+    fusion_node = Node(
+        package='buey_robot', executable='heading_fusion', name='heading_fusion',
+        output='screen', parameters=[fusion_yaml],
     )
 
     # --- ODOMETRIA + TELEMETRIA (delay para que los sensores arranquen) ---
     rtk_odom_node = Node(
         package='buey_robot', executable='rtk_odometry', name='rtk_odometry',
-        output='screen', parameters=[sensors_yaml, nav_yaml],
+        output='screen', parameters=[rtk_yaml, nav_yaml],
     )
     pose_node = Node(
         package='buey_robot', executable='pose_publisher', name='pose_publisher',
@@ -88,7 +97,8 @@ def generate_launch_description():
         motor_gateway,
         micro_ros_agent,
         gps_node,
-        mpu6050_gyro_node,
+        imu_node,
+        fusion_node,
         odom_telemetry,
         controller,
     ])

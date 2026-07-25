@@ -1,20 +1,28 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
 import os
 from glob import glob
 
 package_name = 'buey_robot'
 
+# config/ espeja la estructura de buey_robot/; instalar preservando subcarpetas.
+config_data = [
+    (os.path.join('share', package_name, root),
+     [os.path.join(root, f) for f in files if f.endswith('.yaml')])
+    for root, _, files in os.walk('config')
+    if any(f.endswith('.yaml') for f in files)
+]
+
 setup(
     name=package_name,
     version='2.0.0',
-    packages=find_packages(exclude=['deprecated', 'tools']),
+    # Sin __init__.py: paquetes namespace (PEP 420).
+    packages=find_namespace_packages(include=['buey_robot', 'buey_robot.*']),
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
-        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
-    ],
+    ] + config_data,
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='User',
@@ -31,11 +39,12 @@ setup(
             # Odometry
             'rtk_odometry = buey_robot.odometry.rtk:main',
 
-            # Sensores (drivers de hardware)
-            # IMU MPU6050: micro-ROS publica /mpu6050/imu/data (accel+gyro);
-            # mpu6050_gyro -> bias + heading yaw fusionado con COG GPS.
-            'gps_nmea_driver = buey_robot.mapper.gps_nmea:main',
-            'mpu6050_gyro = buey_robot.mapper.mpu6050_gyro:main',
+            # Drivers (especificos del modelo) -> contrato /imu/*, /gps/fix
+            'imu_mpu6050 = buey_robot.drivers.imu_mpu6050:main',
+            'gps_nmea = buey_robot.drivers.gps_nmea:main',
+
+            # Fusion (agnostica del sensor): /imu/heading + /gps/fix -> /heading/fused
+            'heading_fusion = buey_robot.fusion.heading:main',
 
             # Motor
             'motor_gateway = buey_robot.motor.gateway:main',

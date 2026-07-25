@@ -1,0 +1,8 @@
+# Fusion de heading: IMU (giros) + COG del GPS (referencia absoluta) -> heading absoluto.
+heading_fusion:
+  ros__parameters:
+    offset_alpha: 0.10                    # EMA del offset, tau~10s
+    offset_init_samples: 5                # muestras para el snap inicial
+    straight_max_yaw_rate: 0.08           # rad/s, corregir solo yendo derecho
+    converge_tol_deg: 10.0                # |residual| que cuenta como convergido
+    converge_min_samples: 4               # fixes rectos seguidos para converger

@@ -8,8 +8,8 @@ Firmware en un solo ESP32 (nodo `esp32_imu_node`) que publica:
 
 Pines: MPU6050 → `Wire1` (SDA 33 / SCL 25, shield).
 
-> El LSM303 (magnetómetro/brújula) fue **removido**: la brújula quedó inservible y
-> el heading pasó a ser gyro + COG GPS (nodo `mpu6050_gyro` → `/heading/fused`).
+> El MPU6050 es la **única IMU** del robot: no hay magnetómetro. El heading se
+> resuelve como gyro + COG GPS (nodo `mpu6050_gyro` → `/heading/fused`).
 
 ---
 
@@ -92,5 +92,5 @@ Distinto de calibrar: **no** mide el bias, solo **pone el rumbo actual a 0°** a
 ### Lo que NO se arregla calibrando
 Roll y Pitch son absolutos (salen del acelerómetro = gravedad) y no derivan.
 El **yaw siempre tendrá una deriva residual lenta** porque el bias cambia con la temperatura/tiempo y
-no hay referencia absoluta de rumbo. Para eliminarla de verdad haría falta un **magnetómetro**
-(el LSM303 lo tiene → se fusionaría aguas abajo en ROS).
+el gyro no tiene referencia absoluta de rumbo. Esa deriva se corrige aguas abajo en ROS
+fusionando el gyro con el **COG del GPS** (rumbo absoluto cuando el robot avanza con RTK fix).

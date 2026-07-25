@@ -1,0 +1,11 @@
+# GPS NMEA (RTK): driver serial -> /gps/fix. El lever-arm de antena vive en robot.yaml.
+gps_nmea:
+  ros__parameters:
+    gps.serial.port: "/dev/ttyACM0"       # puerto del GPS RTK
+    gps.serial.baudrate: 9600
+    gps.serial.timeout: 1.0               # s
+    gps.min_satellites: 4                 # minimo para publicar /gps/fix
+    gps.require_rtk_fix: true             # exigir RTK (quality>=4)
+    gps.frame_id: "gps_link"
+    gps.heading.min_speed: 0.20           # m/s min para fiarse del COG (abajo es ruido)
+    gps.heading.require_rtk: true         # exigir RTK para publicar /gps/heading

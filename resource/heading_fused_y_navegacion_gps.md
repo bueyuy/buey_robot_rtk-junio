@@ -26,31 +26,29 @@ acumulada **358°** sobre las 4 vueltas (ideal 360°), drift en reposo **~0.012 
 
 ---
 
-## 2. Firmware dual (dato clave)
+## 2. Firmware (dato clave)
 
 El firmware micro-ROS que corre en la ESP32 (`/dev/ttyUSB0`, agente en `nav_outdoor.launch`)
-es un nodo **DUAL** llamado `esp32_dual_imu_node`. Publica las **dos** IMUs:
+es el nodo `esp32_imu_node`. Publica **una sola IMU**, el MPU6050 (no hay magnetómetro):
 
 | Tópico | Sensor | Contenido | Uso |
 |---|---|---|---|
-| `/imu/data` | LSM303 | accel + **mag** (`angular_velocity` = 0.0, **sin gyro**) | `imu_compass` vía `/imu/mag` |
 | `/mpu6050/imu/data` | MPU6050 | accel + **GYRO real** | `mpu6050_gyro` (heading) |
 
-Rate observado en vivo: **~11 Hz** por tópico.
+Rate observado en vivo: **~11 Hz**.
 
-⚠️ El folder `Buey_ESP32_MPU6050_microROS_fw/` del repo es un firmware **single-IMU**
-(publica `/imu/data`) que **NO es el que corre en el robot**. Para el gyro hay que
-consumir `/mpu6050/imu/data`. Este fue el bug inicial: `mpu6050_gyro` escuchaba
-`/imu/data` (la LSM303, sin gyro) → integraba yaw cero → `/heading/gyro` quedaba en 0.0.
+> Histórico: el firmware fue dual (LSM303 + MPU6050) hasta jul-2026. La brújula LSM303
+> quedó inservible y se removió del firmware (ya no se publica `/imu/data` ni `/imu/mag`);
+> el heading pasó a ser gyro + COG GPS. El gyro siempre vivió en `/mpu6050/imu/data`
+> (el bug inicial fue escuchar `/imu/data`, la LSM303 sin gyro, que integraba yaw cero).
 
 ---
 
 ## 3. Pipeline completo
 
 ```
-firmware dual ESP32 (esp32_dual_imu_node)
-   ├─ /mpu6050/imu/data  (Imu: accel + GYRO)     ┐
-   └─ /imu/data (LSM303, sin gyro)               │      /gps/fix (GPSFix: track=COG, speed, status)
+firmware ESP32 (esp32_imu_node, solo MPU6050)
+   └─ /mpu6050/imu/data  (Imu: accel + GYRO)     ┐      /gps/fix (GPSFix: track=COG, speed, status)
                                                  │                    │
                                                  ▼                    ▼
         ┌───────────────────── mapper/mpu6050_gyro.py ─────────────────────┐
@@ -124,13 +122,11 @@ heading solo y el GPS no lo toca.
 
 - **`true`** → `imu_callback` adopta `/heading/fused` **directo** como `current_heading`
   (sin re-transformar ni re-fusionar), y `_update_heading` no lo pisa. El yaw de
-  `/odom_filtered` pasa a ser gyro+GPS. **Este es el modo activo.**
-- **`false`** → modo brújula clásico (fusión mag+GPS). Se preserva **por si se arregla
-  el LSM303**.
+  `/odom_filtered` es gyro+GPS. **Es el único modo: no hay magnetómetro.**
+- Sin heading IMU (`use_imu_heading=false`) → `rtk` deriva el heading directo del COG del GPS.
 
-Un solo "fused", el de `/odom_filtered`, ahora alimentado por gyro+GPS en vez de la
-brújula muerta. Lo consumen igual `pose_publisher` (telemetría) y `trajectory_controller`
-(navegación).
+Un solo "fused", el de `/odom_filtered`, alimentado por gyro+GPS. Lo consumen igual
+`pose_publisher` (telemetría) y `trajectory_controller` (navegación).
 
 ### Convención (importante)
 
@@ -312,7 +308,7 @@ sin drift ni saltos post-giro. Los picos puntuales ~±20° son **solo en el inst
   gate de yaw-rate (`straight_max_yaw_rate`) — corregir el offset **solo en rectas**.
 - **Convención**: `/heading/gyro` crudo es ENU (CCW, cero arbitrario) → se ve "al revés" de una
   brújula en el dashboard. Es esperado. El bueno es `/heading/fused` (= `odomYaw`), vía `90-cog`.
-- **Firmware dual**: el gyro vive en `/mpu6050/imu/data`, no en `/imu/data` (LSM303 sin gyro).
+- **Firmware**: el gyro vive en `/mpu6050/imu/data` (única IMU; el MPU6050 no tiene magnetómetro).
 
 ---
 
@@ -337,7 +333,4 @@ sin drift ni saltos post-giro. Los picos puntuales ~±20° son **solo en el inst
   el rectángulo ABCD con `waypoints_gps` es la primera prueba de navegación).
 - Flecha del gyro **crudo** en el dashboard convertida a compass (`(90 - heading_gyro) % 360`)
   si molesta verla "al revés".
-- **Arreglar el LSM303** (`/imu/mag` mudo) si se quiere la brújula como respaldo absoluto:
-  revisar I2C / cableado / init en el firmware dual. Con `heading_is_enu=false` vuelve el modo
-  brújula.
 - Tuning fino de `offset_alpha` / `gps_min_speed` si cambia el crucero del robot.

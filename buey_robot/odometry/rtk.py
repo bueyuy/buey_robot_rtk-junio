@@ -1,13 +1,12 @@
 """Odometria RTK: convierte /gps/fix -> /odom_filtered usando GPSConverter.
 
-El heading sale del nodo mpu6050_gyro (/heading/fused = gyro + COG GPS, ENU); con
+El heading sale del nodo heading_fusion (/heading/fused = gyro + COG GPS, ENU); con
 use_imu_heading=false cae al COG del GPS. Produce /odom_filtered, que consume
 navigation/controller.py sin saber como se genero.
 """
 
 import rclpy
 from rclpy.node import Node
-from rclpy.parameter import Parameter
 from gps_msgs.msg import GPSFix
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float32
@@ -19,44 +18,31 @@ from buey_robot.utils.config import load_config, require_key
 from buey_robot.utils.math import angle_normalize
 from buey_robot.utils.filters import MovingAverageFilter, ExponentialFilter
 from buey_robot.utils.gps_converter import GPSConverter
+from buey_robot.contracts import GPS_FIX
+from buey_robot.utils.params import load_params
 
 # Accuracy horizontal (m) por debajo de la cual un fix se considera RTK Fixed (cm)
 # en vez de Float (decimetro). Alineado con la covarianza del driver gps_nmea:
 # Fixed -> 0.02, Float -> 0.05. Solo se usa si gps.origin.allow_float=false.
 _RTK_FIXED_MAX_ACCURACY_M = 0.035
 
+PARAMS = {
+    'origin_allow_float': ('gps.origin.allow_float', bool),
+    'filter_enabled': ('gps.filter.enabled', bool),
+    'filter_window': ('gps.filter.window_size', int),
+    'min_movement': ('gps.heading.min_movement_threshold', float),
+    'heading_alpha': ('gps.heading.filter_alpha', float),
+    'use_imu_heading': ('gps.imu.use_imu_heading', bool),
+    'imu_heading_topic': ('gps.imu.heading_topic', str),
+    'frame_id': ('gps.frame_id', str),
+}
+
 
 class RTKOdometry(Node):
     def __init__(self):
         super().__init__('rtk_odometry')
 
-        # --- Parametros GPS/navegacion (ROS2 estandar, sin defaults) ---
-        self.declare_parameter('gps.origin.auto_set', Parameter.Type.BOOL)
-        # Si true, el origen se fija con el primer fix RTK aunque sea FLOAT (la
-        # precision absoluta del origen no afecta la nav: se cancela en la geometria
-        # relativa robot<->waypoint). Si false, espera un RTK Fixed (cm) para el origen.
-        self.declare_parameter('gps.origin.allow_float', Parameter.Type.BOOL)
-        self.declare_parameter('gps.quality.min_satellites', Parameter.Type.INTEGER)
-        self.declare_parameter('gps.quality.require_rtk_fix', Parameter.Type.BOOL)
-        self.declare_parameter('gps.filter.enabled', Parameter.Type.BOOL)
-        self.declare_parameter('gps.filter.window_size', Parameter.Type.INTEGER)
-        self.declare_parameter('gps.heading.min_movement_threshold', Parameter.Type.DOUBLE)
-        self.declare_parameter('gps.heading.filter_alpha', Parameter.Type.DOUBLE)
-        self.declare_parameter('gps.imu.use_imu_heading', Parameter.Type.BOOL)
-        self.declare_parameter('gps.imu.heading_topic', Parameter.Type.STRING)
-        self.declare_parameter('gps.frame_id', Parameter.Type.STRING)
-
-        self.auto_set_origin = self.get_parameter('gps.origin.auto_set').value
-        self.origin_allow_float = self.get_parameter('gps.origin.allow_float').value
-        self.min_satellites = self.get_parameter('gps.quality.min_satellites').value
-        self.require_rtk = self.get_parameter('gps.quality.require_rtk_fix').value
-        self.filter_enabled = self.get_parameter('gps.filter.enabled').value
-        self.filter_window = self.get_parameter('gps.filter.window_size').value
-        self.min_movement = self.get_parameter('gps.heading.min_movement_threshold').value
-        self.heading_alpha = self.get_parameter('gps.heading.filter_alpha').value
-        self.use_imu_heading = self.get_parameter('gps.imu.use_imu_heading').value
-        self.imu_heading_topic = self.get_parameter('gps.imu.heading_topic').value
-        self.frame_id = self.get_parameter('gps.frame_id').value
+        load_params(self, PARAMS)
 
         # Conversor GPS y filtros
         self.gps_converter = GPSConverter()
@@ -78,8 +64,8 @@ class RTKOdometry(Node):
         #self.heading_imu_pub = self.create_publisher(Float64, '/heading/imu', 10)
 
         # Subscribers
-        self.create_subscription(GPSFix, '/gps/fix', self.gps_callback, 10)
-        # Heading fusionado (gyro + COG GPS) desde el nodo mpu6050_gyro, ya en yaw
+        self.create_subscription(GPSFix, GPS_FIX, self.gps_callback, 10)
+        # Heading fusionado (gyro + COG GPS) desde el nodo heading_fusion, ya en yaw
         # ENU (std_msgs/Float32, GRADOS). El topic es configurable
         # (gps.imu.heading_topic -> /heading/fused). Con use_imu_heading se adopta
         # directo como current_heading; sin el, el heading sale del COG del GPS.
@@ -100,7 +86,6 @@ class RTKOdometry(Node):
         self._origin_output = MqttOriginOutput(mqtt, mqtt_cfg)
 
         self.get_logger().info('RTK Odometry iniciado')
-        self.get_logger().info(f'  Min sats: {self.min_satellites}, Require RTK: {self.require_rtk}')
         self.get_logger().info('  Origen: primer fix GPS (auto), publicado a la nav')
 
     def _origin_fix_ok(self, msg: GPSFix) -> bool:
@@ -112,20 +97,13 @@ class RTKOdometry(Node):
         return acc <= _RTK_FIXED_MAX_ACCURACY_M
 
     def gps_callback(self, msg: GPSFix):
-        """Callback GPS: convierte a ENU, calcula heading, publica /odom_filtered."""
-        # Verificar calidad — loguear rechazos para no quedar mudos en testing
-        if self.require_rtk and msg.status.status < 2:
-            self.get_logger().warn(
-                f'GPS fix rechazado: status={msg.status.status} (requiere RTK, status>=2)',
-                throttle_duration_sec=5.0,
-            )
-            return
-
+        """Callback GPS: convierte a ENU, calcula heading, publica /odom_filtered.
+        La calidad del fix ya la gatea el driver GPS antes de /gps/fix."""
         # Origen del frame ENU: primer fix GPS (donde arranca el robot). Se publica
         # a MQTT para que el controller convierta los waypoints al mismo frame. Con
         # allow_float=false, espera un RTK Fixed; con true, sirve tambien Float.
         if not self.gps_converter.origin_set:
-            if self.auto_set_origin and self._origin_fix_ok(msg):
+            if self._origin_fix_ok(msg):
                 self.gps_converter.set_origin(msg.latitude, msg.longitude)
                 self._origin_output.send(msg.latitude, msg.longitude)
                 acc = math.sqrt(max(0.0, msg.position_covariance[0]))
@@ -134,7 +112,7 @@ class RTKOdometry(Node):
                     f'Origen GPS (primer fix, {kind}, ~{acc:.2f}m): '
                     f'lat={msg.latitude:.8f}, lon={msg.longitude:.8f}')
                 self.gps_received = True
-            elif self.auto_set_origin:
+            else:
                 self.get_logger().warn(
                     'Esperando RTK Fixed para el origen (allow_float=false)...',
                     throttle_duration_sec=5.0)
@@ -157,9 +135,9 @@ class RTKOdometry(Node):
         self._publish_odometry(msg)
 
     def imu_callback(self, msg: Float32):
-        """Heading fusionado (gyro + COG GPS) desde mpu6050_gyro (/heading/fused),
+        """Heading fusionado (gyro + COG GPS) desde heading_fusion (/heading/fused),
         ya en yaw ENU. Se adopta directo como current_heading cuando use_imu_heading;
-        rtk NO re-transforma ni re-fusiona (la fusion ya la hizo mpu6050_gyro)."""
+        rtk NO re-transforma ni re-fusiona (la fusion ya la hizo heading_fusion)."""
         if not self.use_imu_heading:
             return
         self.current_heading = angle_normalize(math.radians(msg.data))

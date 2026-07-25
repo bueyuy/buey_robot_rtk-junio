@@ -27,13 +27,14 @@ from buey_robot.navigation.waypoint_manager import WaypointManager
 from buey_robot.utils.config import load_config, require_key
 from buey_robot.utils.gps_converter import GPSConverter
 from buey_robot.utils.math import angle_diff, quaternion_to_yaw
+from buey_robot.contracts import IMU_HEADING, IMU_CALIBRATE, HEADING_FUSED_READY
 
-# Segundos tras enviar /gyro/calibrate durante los que se ignora /heading/gyro
+# Segundos tras enviar /imu/calibrate durante los que se ignora /imu/heading
 # (para descartar mensajes viejos previos a la recalibracion). El auto-bias tarda
 # ~10s (200 muestras), asi que este margen corto no lo alcanza.
 GYRO_CALIB_TRIGGER_GRACE_S = 1.5
 # Retardo antes de disparar el trigger: da tiempo a descubrir la suscripcion de
-# mpu6050_gyro y a que el primer odom llegue (robot ya parado en el inicio).
+# imu_mpu6050 y a que el primer odom llegue (robot ya parado en el inicio).
 GYRO_CALIB_TRIGGER_DELAY_S = 2.0
 
 
@@ -62,17 +63,17 @@ class TrajectoryController(Node):
         _d('controller.prealign.distance_m', T.DOUBLE)
         # Endurecimiento del arranque: no soltar la navegacion solo por haber
         # avanzado distance_m; ademas confirmar que el heading fused convergio
-        # (mpu6050_gyro publica /heading/fused_ready). max_distance_m es el tope de
+        # (heading_fusion publica /heading/fused_ready). max_distance_m es el tope de
         # seguridad del creep si la convergencia nunca llega (COG/RTK malos).
         _d('controller.prealign.require_fused_convergence', T.BOOL)
         _d('controller.prealign.max_distance_m', T.DOUBLE)
         # Esperar la calibracion del gyro (auto-bias, robot quieto) antes de moverse.
-        # mpu6050_gyro solo publica /heading/gyro DESPUES de calibrar el bias.
+        # imu_mpu6050 solo publica /imu/heading DESPUES de calibrar el bias.
         _d('controller.wait_for_gyro_calibration', T.BOOL)
         # Disparar una calibracion FRESCA del gyro al arrancar la navegacion (en vez
-        # de usar la que hizo mpu6050_gyro al levantar el stack): el robot esta
+        # de usar la que hizo imu_mpu6050 al levantar el stack): el robot esta
         # recien parado y quieto en el punto de inicio. El controller publica
-        # /gyro/calibrate y espera a que reaparezca /heading/gyro (recalibrado).
+        # /imu/calibrate y espera a que reaparezca /imu/heading (recalibrado).
         _d('controller.trigger_gyro_calibration', T.BOOL)
         # Motor params — el gateway los lee por separado; aqui solo para publicar config MQTT
         _d('motor_control.wheel_separation', T.DOUBLE); _d('motor_control.max_output', T.DOUBLE)
@@ -101,11 +102,11 @@ class TrajectoryController(Node):
         self._fused_converged = not self.prealign_require_converge
         self.wait_for_gyro_cal = gp('controller.wait_for_gyro_calibration').value
         self.trigger_gyro_cal = gp('controller.trigger_gyro_calibration').value
-        # mpu6050_gyro publica /heading/gyro solo tras calibrar el bias -> el primer
+        # imu_mpu6050 publica /imu/heading solo tras calibrar el bias -> el primer
         # mensaje = gyro calibrado. Hasta entonces el robot no se mueve.
         self._gyro_calibrated = not self.wait_for_gyro_cal
-        # Al disparar una recalibracion, mpu6050_gyro deja de publicar /heading/gyro
-        # ~10s. Ignoramos /heading/gyro durante este margen tras enviar el trigger
+        # Al disparar una recalibracion, imu_mpu6050 deja de publicar /imu/heading
+        # ~10s. Ignoramos /imu/heading durante este margen tras enviar el trigger
         # para no tomar un mensaje VIEJO (pre-recalibracion) como "ya calibrado".
         self._calib_trigger_time = None
 
@@ -173,28 +174,28 @@ class TrajectoryController(Node):
         # Subscriber: /odom_filtered ya viene procesada desde el nodo de odometria
         self.create_subscription(Odometry, '/odom_filtered', self.odom_callback, 10)
 
-        # Señal de gyro calibrado: mpu6050_gyro publica /heading/gyro recien tras
+        # Señal de gyro calibrado: imu_mpu6050 publica /imu/heading recien tras
         # el auto-bias (y solo si el gyro da señal real). El primer mensaje habilita
         # el movimiento.
         if self.wait_for_gyro_cal:
-            self.create_subscription(Float32, '/heading/gyro', self._gyro_ready_cb, 10)
+            self.create_subscription(Float32, IMU_HEADING, self._gyro_ready_cb, 10)
 
         # Disparo de una calibracion fresca del gyro desde la navegacion: el robot
-        # esta recien parado en el inicio. Se publica /gyro/calibrate una vez tras un
-        # retardo (descubrimiento + primer odom) y se espera /heading/gyro recalibrado.
+        # esta recien parado en el inicio. Se publica /imu/calibrate una vez tras un
+        # retardo (descubrimiento + primer odom) y se espera /imu/heading recalibrado.
         self._calib_pub = None
         if self.trigger_gyro_cal:
-            self._calib_pub = self.create_publisher(Empty, '/gyro/calibrate', 10)
+            self._calib_pub = self.create_publisher(Empty, IMU_CALIBRATE, 10)
             self._calib_timer = self.create_timer(
                 GYRO_CALIB_TRIGGER_DELAY_S, self._send_gyro_calibrate)
 
-        # Señal de heading fused convergido: mpu6050_gyro publica /heading/fused_ready
+        # Señal de heading fused convergido: heading_fusion publica /heading/fused_ready
         # (latched) cuando el offset gyro->GPS se estabiliza. El creep de pre-alineacion
         # no termina hasta recibirlo (evita soltar la nav con heading sin alinear).
         if self.prealign_require_converge:
             latched = QoSProfile(depth=1, history=HistoryPolicy.KEEP_LAST,
                                  durability=DurabilityPolicy.TRANSIENT_LOCAL)
-            self.create_subscription(Bool, '/heading/fused_ready', self._fused_ready_cb, latched)
+            self.create_subscription(Bool, HEADING_FUSED_READY, self._fused_ready_cb, latched)
 
         # Timers
         self.create_timer(1.0 / self.frequency, self.control_loop)
@@ -237,13 +238,13 @@ class TrajectoryController(Node):
         if self._calib_pub is not None:
             self._calib_pub.publish(Empty())
         self.get_logger().info(
-            'Solicitada recalibracion del gyro (/gyro/calibrate) — mantener el robot QUIETO')
+            'Solicitada recalibracion del gyro (/imu/calibrate) — mantener el robot QUIETO')
 
     def _gyro_ready_cb(self, msg: Float32):
-        """/heading/gyro = mpu6050_gyro termino el auto-bias -> habilita mover.
+        """/imu/heading = imu_mpu6050 termino el auto-bias -> habilita mover.
 
         Si se disparo una recalibracion, ignorar los mensajes dentro del margen tras
-        el trigger: son /heading/gyro VIEJOS (previos a que el gyro deje de publicar
+        el trigger: son /imu/heading VIEJOS (previos a que el gyro deje de publicar
         para recalibrar). Recien pasado el margen, el proximo mensaje es el recalibrado.
         """
         if self._gyro_calibrated:
@@ -253,14 +254,14 @@ class TrajectoryController(Node):
                 return  # trigger aun no enviado
             now = self.get_clock().now().nanoseconds * 1e-9
             if now - self._calib_trigger_time < GYRO_CALIB_TRIGGER_GRACE_S:
-                return  # podria ser un /heading/gyro previo a la recalibracion
+                return  # podria ser un /imu/heading previo a la recalibracion
         self._gyro_calibrated = True
-        self.get_logger().info('Gyro calibrado (/heading/gyro) — navegacion habilitada')
+        self.get_logger().info('Gyro calibrado (/imu/heading) — navegacion habilitada')
 
     def _fused_ready_cb(self, msg: Bool):
         """/heading/fused_ready = estado de convergencia del offset gyro->GPS.
 
-        Bidireccional: al recalibrar el gyro, mpu6050_gyro republica false y hay que
+        Bidireccional: al recalibrar el gyro, imu_mpu6050 republica false y hay que
         volver a esperar la convergencia (no quedarse con un true latcheado viejo)."""
         was = self._fused_converged
         self._fused_converged = bool(msg.data)
@@ -424,7 +425,7 @@ class TrajectoryController(Node):
         goal_x, goal_y = goal
 
         # Esperar la calibracion del gyro (auto-bias con el robot QUIETO) antes de
-        # cualquier movimiento. Hasta el primer /heading/gyro el robot no se mueve.
+        # cualquier movimiento. Hasta el primer /imu/heading el robot no se mueve.
         if not self._gyro_calibrated:
             self._publish_stop()
             self._publish_status('Esperando calibracion del gyro (robot quieto)...')

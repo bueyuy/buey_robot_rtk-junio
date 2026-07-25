@@ -2,9 +2,9 @@
  * ESP32 - MPU6050 (GY-521) IMU con micro-ROS Serial
  * Publica sensor_msgs/Imu (acelerometro + giroscopio) por USB serial.
  *
- * Proyecto independiente del firmware LSM303 (IMU con magnetometro):
- * el MPU6050 no tiene magnetometro, asi que aqui se publica un Imu
- * completo con linear_acceleration y angular_velocity.
+ * Es la UNICA IMU del robot: el MPU6050 no tiene magnetometro, asi que se
+ * publica un Imu con linear_acceleration y angular_velocity (sin campo mag).
+ * El heading se resuelve aguas abajo en ROS (gyro integrado + COG GPS).
  *
  * Lectura del sensor basada en la libreria MPU6050 de Jeff Rowberg (I2Cdevlib).
  */

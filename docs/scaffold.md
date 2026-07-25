@@ -36,7 +36,7 @@ buey_robot/
         inputs/                    Clases de ADQUISICION (NO nodos). Suscriben topics MQTT,
                                    parsean bytes a dict e invocan un callback.
           imu.py                   (MqttImuInput — suscribe imu/* del broker.
-                                    on_data(dict) con accel_x/y/z, mag_x/y/z, heading.
+                                    on_data(dict) con accel_x/y/z, gyro_x/y/z, heading.
                                     Sin rclpy. Instanciada por mapper/imu.py)
         outputs/                   Clases reutilizables (NO nodos). Los productores
                                    las instancian y llaman .send() directo, sin topics ROS2 intermedios.
