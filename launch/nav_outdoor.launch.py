@@ -54,9 +54,9 @@ def generate_launch_description():
     )
 
     # --- DRIVERS (especificos del modelo) ---
-    gps_node = Node(  # robot.yaml aporta el lever-arm de la antena
+    gps_node = Node(
         package='buey_robot', executable='gps_nmea', name='gps_nmea',
-        output='screen', parameters=[gps_yaml, robot_yaml],
+        output='screen', parameters=[gps_yaml],
     )
     imu_node = Node(
         package='buey_robot', executable='imu_mpu6050', name='imu_mpu6050',
@@ -70,9 +70,9 @@ def generate_launch_description():
     )
 
     # --- ODOMETRIA + TELEMETRIA (delay para que los sensores arranquen) ---
-    rtk_odom_node = Node(
+    rtk_odom_node = Node(  # robot.yaml aporta el lever-arm de la antena
         package='buey_robot', executable='rtk_odometry', name='rtk_odometry',
-        output='screen', parameters=[rtk_yaml, nav_yaml],
+        output='screen', parameters=[rtk_yaml, robot_yaml],
     )
     pose_node = Node(
         package='buey_robot', executable='pose_publisher', name='pose_publisher',

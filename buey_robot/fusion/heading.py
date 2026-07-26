@@ -3,7 +3,7 @@ absoluta, ya validada por el GPS) -> heading absoluto sin drift = imu_heading + 
 El offset (= gps_heading - imu_heading, suavizado) se corrige solo yendo derecho
 (yaw rate bajo del IMU); el GPS ya publica /gps/heading solo cuando es confiable.
 
-Publica  /heading/fused (deg ENU), /heading/fused_ready (Bool latched), /fusion/status.
+Publica  /heading/fused (deg ENU), /heading/fused_ready (Bool, retiene ultimo valor), /fusion/status.
 """
 
 import json
@@ -47,10 +47,10 @@ class HeadingFusion(Node):
         self._converge_count = 0
         self._ready = False
 
-        latched = QoSProfile(depth=1, history=HistoryPolicy.KEEP_LAST,
-                             durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        retained = QoSProfile(depth=1, history=HistoryPolicy.KEEP_LAST,
+                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self._fused_pub = self.create_publisher(Float32, HEADING_FUSED, 10)
-        self._ready_pub = self.create_publisher(Bool, HEADING_FUSED_READY, latched)
+        self._ready_pub = self.create_publisher(Bool, HEADING_FUSED_READY, retained)
         self._status_pub = self.create_publisher(String, FUSION_STATUS, 10)
         self._ready_pub.publish(Bool(data=False))
 
@@ -101,7 +101,7 @@ class HeadingFusion(Node):
             self._track_convergence(self._last_residual)
 
     def _track_convergence(self, residual):
-        """Publica /heading/fused_ready=true (latched, una vez) tras N muestras rectas con
+        """Publica /heading/fused_ready=true (una sola vez) tras N muestras rectas con
         residual chico -> el controller lo espera antes de soltar la navegacion."""
         self._converge_count = self._converge_count + 1 if abs(residual) <= self.converge_tol_deg else 0
         if not self._ready and self._converge_count >= self.converge_min_samples:
