@@ -39,6 +39,7 @@ class NavigationController(Node):
         self._route_loaded = False
         self._loop_route = False
         self._navigating = False
+        self._last_state = None      # para loguear el estado del loop solo en transiciones
         self._wp = WaypointManager()
         self._control = StopAndTurnControl(StopAndTurnParams(
             cruise_linear=self.cruise_linear, cruise_angular=self.cruise_angular,
@@ -51,27 +52,44 @@ class NavigationController(Node):
         self.create_subscription(Empty, NAV_START, self._on_start, 10)
         self._cmd_pub = self.create_publisher(Twist, NAV_CMD_VEL, 10)
         self.create_timer(1.0 / self.frequency, self._loop)
+        self.get_logger().info(
+            f'navigation_controller iniciado (freq={self.frequency}Hz, odom_timeout={self.odom_timeout}s)')
+
+    def _log_state(self, msg):
+        if msg != self._last_state:   # loguear el estado del loop solo en transiciones (no a N Hz)
+            self.get_logger().info(msg)
+            self._last_state = msg
 
     def _loop(self):
-        if not self._odom_fresh() or not self._navigating:
+        if not self._odom_fresh():
+            self._log_state('sin odometria fresca -> detenido')
+            self._stop()
+            return
+        if not self._navigating:
+            self._log_state('idle (esperando GO)')
             self._stop()
             return
         if self._wp.is_complete():
             if self._loop_route:
                 self._wp.restart()
                 self._control.reset()
+                self.get_logger().info('ruta completa -> reiniciando (loop)')
             else:
                 self._navigating = False
                 self._stop()
+                self.get_logger().info('ruta completada')
                 return
         pose = (self._x, self._y, self._heading)
-        linear, angular, reached, _ = self._control.compute(pose, self._wp.current_goal())
+        linear, angular, reached, status = self._control.compute(pose, self._wp.current_goal())
         if reached:
             self._wp.advance()
             if not self._wp.is_complete():
                 self._control.reset()
             self._stop()
+            self.get_logger().info(f'WP alcanzado ({self._wp.progress_string()})')
             return
+        self._last_state = None                                   # al volver a idle/stale re-loguea
+        self.get_logger().info(status, throttle_duration_sec=2.0)  # progreso (dist) cada 2s
         self._publish(linear, angular)
 
     def _on_odom(self, msg):
@@ -97,19 +115,23 @@ class NavigationController(Node):
             self._route_loaded = False
             self._navigating = False
             self._stop()
+            self.get_logger().info('ruta vacia -> descartada, idle')
             return
         self._wp.set_waypoints([(w['x'], w['y']) for w in wps])
         self._loop_route = bool(route.get('loop', False))
         self._route_loaded = True
         self._navigating = False                   # ruta lista pero NO arranca: espera el GO
         self._control.reset()
+        self.get_logger().info(f'ruta cargada: {len(wps)} waypoints (loop={self._loop_route}), esperando GO')
 
     def _on_start(self, msg):
         if not self._route_loaded:
+            self.get_logger().warn('GO ignorado: no hay ruta cargada')
             return
         self._wp.restart()
         self._control.reset()
         self._navigating = True
+        self.get_logger().info('GO -> navegando')
 
     def _publish(self, linear, angular):
         t = Twist()

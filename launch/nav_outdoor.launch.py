@@ -81,6 +81,12 @@ def generate_launch_description():
     odom_telemetry = TimerAction(
         period=2.0, actions=[odometry_gps_node, telemetry_bridge_node])
 
+    # --- LOG BRIDGE (/rosout -> MQTT); arranca primero para captar los logs de arranque ---
+    log_bridge_node = Node(
+        package='buey_robot', executable='log_bridge', name='log_bridge',
+        output='screen',
+    )
+
     # --- NAV_CONTROLLER + bridge de comandos (delay para que /odom ya publique) ---
     controller_node = Node(
         package='buey_robot', executable='navigation_controller',
@@ -100,6 +106,7 @@ def generate_launch_description():
         period=6.0, actions=[controller_node, initializer_node, command_bridge_node])
 
     return LaunchDescription([
+        log_bridge_node,
         motor_gateway,
         micro_ros_agent,
         gps_node,

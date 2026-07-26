@@ -28,6 +28,7 @@ class CommandBridge(Node):
 
         self._mqtt.subscribe(require_key(mqtt_cfg, 'topics', 'waypoints'), self._on_waypoints)
         self._mqtt.subscribe(require_key(mqtt_cfg, 'topics', 'nav_start'), self._on_start)
+        self.get_logger().info('command_bridge iniciado (MQTT waypoints/start -> /geo/route, /nav/start)')
 
     def _on_waypoints(self, client, userdata, msg):
         route = self._parse(msg)

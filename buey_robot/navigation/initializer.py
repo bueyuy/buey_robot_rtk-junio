@@ -43,6 +43,9 @@ class NavigationInitializer(Node):
         self.create_subscription(Float32, IMU_YAW, self._on_yaw, 10)
         self.create_subscription(Float32, HEADING_FUSED, self._on_fused, 10)
         self.create_timer(1.0 / self.rate, self._tick)
+        self.get_logger().info(
+            f'navigation_initializer iniciado (recalib gyro + recto {self.straight_speed}m/s '
+            f'hasta converger, min {self.min_distance}m / max {self.max_distance}m)')
 
     def _now(self):
         return self.get_clock().now().nanoseconds * 1e-9
@@ -55,6 +58,7 @@ class NavigationInitializer(Node):
         self._start_xy = None
         self._calib_sent_at = self._now()
         self._calib_pub.publish(Empty())
+        self.get_logger().info('GO -> recalibrando gyro (mantener el robot QUIETO)')
 
     def _on_odom(self, msg):
         self._x = msg.pose.pose.position.x
@@ -76,10 +80,18 @@ class NavigationInitializer(Node):
             if self._gyro_ready:
                 self._start_xy = (self._x, self._y)
                 self._state = _DRIVING_STRAIGHT
+                self.get_logger().info(
+                    f'gyro calibrado -> avanzando recto (min {self.min_distance:.1f}m, max {self.max_distance:.1f}m)')
             return
         traveled = self._traveled()
-        if (self._converged and traveled >= self.min_distance) or traveled >= self.max_distance:
+        if self._converged and traveled >= self.min_distance:
             self._state = _IDLE                    # listo: dejar de publicar -> el mux cede a nav
+            self.get_logger().info(f'heading listo ({traveled:.1f}m) -> cediendo a la navegacion')
+            return
+        if traveled >= self.max_distance:
+            self._state = _IDLE
+            self.get_logger().warn(
+                f'tope {self.max_distance:.1f}m sin converger el heading -> cediendo igual (revisar COG/RTK)')
             return
         self._publish(self.straight_speed)
 

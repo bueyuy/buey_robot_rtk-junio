@@ -15,8 +15,7 @@ from std_msgs.msg import Float32, String
 from buey_robot.adapters.mqtt.client import get_client
 from buey_robot.utils.config import load_config, require_key
 from buey_robot.utils.math import quaternion_to_yaw
-from buey_robot.contracts import (
-    ODOM, HEADING_FUSED, IMU_YAW, IMU_STATUS, GPS_STATUS, HEADING_FUSED_STATUS)
+from buey_robot.contracts import ODOM, HEADING_FUSED, IMU_YAW, IMU_STATUS, GPS_STATUS
 
 # (topic ROS, tipo, periodo minimo de publicacion en seg, topic MQTT | None).
 # Si el topic MQTT es None, se usa bueyuy/<topic-ros-sin-slash>.
@@ -27,7 +26,6 @@ BRIDGED = [
     (ODOM, Odometry, 0.1, None),
     (IMU_STATUS, String, 0.0, None),
     (GPS_STATUS, String, 0.0, None),
-    (HEADING_FUSED_STATUS, String, 0.0, None),
 ]
 
 
@@ -44,6 +42,7 @@ class TelemetryBridge(Node):
         for ros_topic, msg_type, min_period, override in BRIDGED:
             mqtt_topic = override or ('bueyuy/' + ros_topic.lstrip('/'))
             self.create_subscription(msg_type, ros_topic, self._make_cb(mqtt_topic, min_period), 10)
+        self.get_logger().info('telemetry_bridge iniciado (ROS -> MQTT para la web)')
 
     def _on_odom(self, msg):
         q = msg.pose.pose.orientation

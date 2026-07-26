@@ -19,11 +19,9 @@ PARAMS = {
     'port': ('gps.serial.port', str),
     'baud': ('gps.serial.baudrate', int),
     'timeout': ('gps.serial.timeout', float),
-    'min_satellites': ('gps.min_satellites', int),
-    'require_rtk': ('gps.require_rtk_fix', bool),
     'frame_id': ('gps.frame_id', str),
-    'heading_min_speed': ('gps.heading.min_speed', float),
-    'heading_require_rtk': ('gps.heading.require_rtk', bool),
+    'course_min_speed': ('gps.course.min_speed', float),
+    'course_require_rtk': ('gps.course.require_rtk', bool),
 }
 
 QUALITY_NAMES = {0: 'No Fix', 1: 'GPS', 2: 'DGPS', 4: 'RTK Fixed', 5: 'RTK Float'}
@@ -89,30 +87,21 @@ class GpsNmea(Node):
         cog, speed_knots = data.get('cog'), data.get('speed_knots')
         if cog is None or speed_knots is None:
             return
-        if speed_knots * _KNOTS_TO_MS < self.heading_min_speed:
+        if speed_knots * _KNOTS_TO_MS < self.course_min_speed:
             return
-        if self.heading_require_rtk and data['quality'] < 4:
+        if self.course_require_rtk and data['quality'] < 4:
             return
         self._course_pub.publish(Float32(data=float((90.0 - cog) % 360.0)))
 
     def _on_fix(self, data: dict):
-        """Recibe un fix del parser, aplica gates de calidad y publica /gps/fix + /gps/status."""
+        """Publica el fix con su calidad (accuracy segun quality/hdop). La validez -si es
+        suficientemente bueno- la decide el consumidor. Solo se omite si no hay coordenadas."""
         self._log_quality(data)
         self._publish_course(data)
 
         if data['lat'] is None or data['lon'] is None:
             self.get_logger().warn(
                 f'Sin coordenadas todavia (quality={data["quality"]}, sats={data["satellites"]})',
-                throttle_duration_sec=5.0)
-            return
-        if data['satellites'] < self.min_satellites:
-            self.get_logger().warn(
-                f'/gps/fix no publicado: sats={data["satellites"]} < min={self.min_satellites}',
-                throttle_duration_sec=5.0)
-            return
-        if self.require_rtk and data['quality'] < 4:
-            self.get_logger().warn(
-                f'/gps/fix no publicado: quality={data["quality"]} (requiere RTK Fixed=4)',
                 throttle_duration_sec=5.0)
             return
 

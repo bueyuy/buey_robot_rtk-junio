@@ -1,8 +1,4 @@
-"""Gestion de waypoints: carga (via set_waypoints), avance, loop.
-
-Los waypoints llegan SIEMPRE por MQTT (bueyuy/waypoints), ya convertidos a x,y
-locales por el controller. No se cargan de archivos YAML.
-"""
+"""Gestion de una lista de waypoints locales (x, y): carga, avance, loop."""
 
 
 class WaypointManager:

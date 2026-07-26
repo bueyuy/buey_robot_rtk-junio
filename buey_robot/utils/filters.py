@@ -1,7 +1,5 @@
 """Filtros de senal para suavizado de mediciones."""
 
-from typing import Optional
-
 
 class MovingAverageFilter:
     """Filtro de media movil para suavizar mediciones ruidosas."""
@@ -19,26 +17,3 @@ class MovingAverageFilter:
 
     def reset(self):
         self.values = []
-
-
-class ExponentialFilter:
-    """Filtro exponencial simple para suavizado de senales."""
-
-    def __init__(self, alpha: float = 0.3):
-        """
-        Args:
-            alpha: Factor de suavizado (0-1). Valores menores = mas suavizado.
-        """
-        self.alpha = alpha
-        self.value: Optional[float] = None
-
-    def update(self, measurement: float) -> float:
-        """Actualiza el filtro con una nueva medicion."""
-        if self.value is None:
-            self.value = measurement
-        else:
-            self.value = self.alpha * measurement + (1 - self.alpha) * self.value
-        return self.value
-
-    def reset(self):
-        self.value = None

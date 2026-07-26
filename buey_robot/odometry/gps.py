@@ -17,11 +17,10 @@ from buey_robot.utils.filters import MovingAverageFilter
 from buey_robot.utils.params import load_params
 from buey_robot.contracts import GPS_FIX, HEADING_FUSED, ODOM, GEO_ROUTE, LOCAL_ROUTE
 
-_FIXED_MAX_ACCURACY_M = 0.035     # techo de accuracy para RTK Fixed (cm)
-_FLOAT_MAX_ACCURACY_M = 0.10      # techo de accuracy para RTK Float (dm)
-
 PARAMS = {
     'allow_float': ('gps.allow_float', bool),
+    'fixed_max_accuracy': ('gps.rtk.fixed_max_accuracy_m', float),
+    'float_max_accuracy': ('gps.rtk.float_max_accuracy_m', float),
     'filter_enabled': ('gps.filter.enabled', bool),
     'filter_window': ('gps.filter.window_size', int),
     'antenna_offset': ('robot.antenna.offset_x_m', float),
@@ -38,6 +37,7 @@ class OdometryGps(Node):
         self._yf = MovingAverageFilter(self.filter_window) if self.filter_enabled else None
         self._heading = None         # rad, yaw ENU de /heading/fused
         self._pending_route = None   # ruta geo que llego antes de fijar el datum
+        self._reliable = None        # estado del gate de accuracy (para loguear transiciones)
         self._odom_pub = self.create_publisher(Odometry, ODOM, 10)
         retained = QoSProfile(depth=1, history=HistoryPolicy.KEEP_LAST,
                               durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -45,9 +45,12 @@ class OdometryGps(Node):
         self.create_subscription(GPSFix, GPS_FIX, self._on_fix, 10)
         self.create_subscription(Float32, HEADING_FUSED, self._on_heading, 10)
         self.create_subscription(String, GEO_ROUTE, self._on_route, 10)
+        self.get_logger().info(
+            f'odometry_gps iniciado: minimo {"RTK Float" if self.allow_float else "RTK Fixed"} '
+            f'(accuracy <= {self._max_accuracy():.2f}m). Peor que eso no publica /odom.')
 
     def _max_accuracy(self):
-        return _FLOAT_MAX_ACCURACY_M if self.allow_float else _FIXED_MAX_ACCURACY_M
+        return self.float_max_accuracy if self.allow_float else self.fixed_max_accuracy
 
     def _on_heading(self, msg):
         self._heading = math.radians(msg.data)
@@ -55,9 +58,19 @@ class OdometryGps(Node):
     def _on_fix(self, msg):
         acc = math.sqrt(max(0.0, msg.position_covariance[0]))
         if acc > self._max_accuracy():        # fix poco preciso -> no publico odometria
+            if self._reliable is not False:
+                self._reliable = False
+                self.get_logger().warn(
+                    f'GPS poco preciso: accuracy {acc:.2f}m > {self._max_accuracy():.2f}m '
+                    f'({"RTK Float" if self.allow_float else "RTK Fixed"}). No publico /odom.')
             return
+        if self._reliable is not True:
+            self._reliable = True
+            self.get_logger().info(f'GPS confiable (accuracy {acc:.2f}m) -> publicando /odom')
         if not self._conv.origin_set:          # datum = primer fix confiable
             self._conv.set_origin(msg.latitude, msg.longitude)
+            self.get_logger().info(
+                f'datum fijado (primer fix): lat={msg.latitude:.7f} lon={msg.longitude:.7f}')
             if self._pending_route is not None:
                 self._publish_route(self._pending_route)
                 self._pending_route = None
@@ -101,6 +114,7 @@ class OdometryGps(Node):
               for wp in route.get('waypoints', [])]
         self._route_pub.publish(String(data=json.dumps(
             {'waypoints': xy, 'loop': bool(route.get('loop', False))})))
+        self.get_logger().info(f'ruta convertida a x/y: {len(xy)} waypoints')
 
 
 def main(args=None):

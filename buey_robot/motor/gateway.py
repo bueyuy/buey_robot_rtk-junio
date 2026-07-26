@@ -60,11 +60,14 @@ class MotorGateway(Node):
         self._target = {n: (0.0, 0.0) for n in self.PRIORITY}
         self._stamp = {n: 0.0 for n in self.PRIORITY}
         self._timeout = self.source_timeout_ms / 1000.0
+        self._last_source = ''       # para loguear el cambio de fuente activa del mux
 
         self.create_subscription(Twist, NAV_CMD_VEL, lambda m: self._on_cmd('nav', m), 10)
         self.create_subscription(Twist, JOY_CMD_VEL, lambda m: self._on_cmd('joy', m), 10)
         self.create_subscription(Twist, INIT_CMD_VEL, lambda m: self._on_cmd('init', m), 10)
         self.create_timer(1.0 / self.rate, self._tick)
+        self.get_logger().info(
+            f'motor_gateway iniciado (mux joy>init>nav, L={self.L}, max_output={self.max_output})')
 
     def _now(self):
         return self.get_clock().now().nanoseconds * 1e-9
@@ -82,6 +85,9 @@ class MotorGateway(Node):
 
     def _tick(self):
         name = self._active()
+        if name != self._last_source:
+            self._last_source = name
+            self.get_logger().info(f'mux: {name} toma control' if name else 'mux: sin fuente -> frenando')
         if name is None:
             tv, tw = 0.0, 0.0
             self._vramp.set_rates(self.brake_lin, self.brake_lin)

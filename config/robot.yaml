@@ -6,9 +6,8 @@
         wheelbase: 0.8              # metros, distancia entre ejes
 
       # Antena GPS rover: montada offset_x_m ADELANTE del centro del robot (en la
-      # trompa). El driver gps_nmea traslada la posicion al centro usando el heading,
-      # antes de publicar /gps/fix y rtk/location/json -> UNA sola ubicacion (centro),
-      # no una cruda y una corregida. Positivo = adelante; 0 = antena ya en el centro.
+      # trompa). La odometria la traslada al centro con el heading (lever-arm).
+      # Positivo = adelante; 0 = antena ya en el centro.
       antenna:
         offset_x_m: 0.40
 

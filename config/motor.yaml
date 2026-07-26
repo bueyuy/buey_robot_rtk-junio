@@ -11,16 +11,6 @@
       # Limites de salida
       max_output: 70.0              # porcentaje maximo (-100 a 100)
 
-      # Zona muerta suave (deshabilitada en codigo para pruebas)
-      soft_deadzone:
-        low: 5.0
-        high: 20.0
-
-      # Safety
-      safety:
-        joystick_timeout_ms: 600.0  # ms sin joystick -> liberar prioridad
-        watchdog_timeout_ms: 500.0  # ms sin cmd_vel -> motores a 0 (futuro)
-
     # Capa velocity: mux por prioridad + rampa por fuente (delta max por tick)
     velocity:
       rate_hz: 20.0                 # Hz del lazo de salida a motores

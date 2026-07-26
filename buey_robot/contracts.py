@@ -13,11 +13,9 @@ IMU_CALIBRATE = '/imu/calibrate'                # Empty, trigger de recalibracio
 
 # Fusion de heading
 HEADING_FUSED = '/heading/fused'                # Float32, deg ENU, yaw absoluto; sale solo al converger
-HEADING_FUSED_STATUS = '/heading/fused/status'  # String, JSON
 
 # Odometria
 ODOM = '/odom'                                  # Odometry, pose x/y + twist en frame local
-ODOM_STATUS = '/odom/status'                    # String, confiabilidad de la odom
 
 # Rutas (String con JSON: {waypoints:[...], loop})
 GEO_ROUTE = '/geo/route'                        # String JSON {waypoints:[{lat,lon}], loop}
@@ -25,7 +23,6 @@ LOCAL_ROUTE = '/local/route'                    # String JSON {waypoints:[{x,y}]
 
 # Navegacion
 NAV_START = '/nav/start'                        # Empty, GO
-NAV_STATUS = '/nav/status'                      # String, estado de la navegacion
 NAV_CMD_VEL = '/nav/cmd_vel'                    # Twist, velocidad objetivo de navegacion
 JOY_CMD_VEL = '/joy/cmd_vel'                    # Twist, velocidad de teleoperacion
 INIT_CMD_VEL = '/init/cmd_vel'                  # Twist, velocidad de la maniobra de arranque

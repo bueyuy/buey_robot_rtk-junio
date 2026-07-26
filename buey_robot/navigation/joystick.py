@@ -37,6 +37,7 @@ class JoystickController(Node):
         self._mqtt.subscribe(mqtt_cfg['topics']['joystick'], self._on_joystick)
         self._pub = self.create_publisher(Twist, JOY_CMD_VEL, 10)
         self.create_timer(1.0 / self.frequency, self._output_loop)
+        self.get_logger().info('joystick_controller iniciado (teleop MQTT -> /joy/cmd_vel crudo)')
 
     def _on_joystick(self, client, userdata, msg):
         try:

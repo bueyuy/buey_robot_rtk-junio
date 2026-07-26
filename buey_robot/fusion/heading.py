@@ -36,6 +36,9 @@ class FusionHeading(Node):
         self.create_subscription(Float32, IMU_YAW, self._on_yaw, 10)
         self.create_subscription(Float32, IMU_RATE, self._on_rate, 10)
         self.create_subscription(Float32, GPS_COURSE, self._on_course, 10)
+        self.get_logger().info(
+            f'fusion_heading iniciado: gyro+COG -> /heading/fused solo al converger '
+            f'(alpha={self.offset_alpha}, tol={self.converge_tol_deg}deg x{self.converge_min_samples})')
 
     def _on_rate(self, msg):
         self._yaw_rate = msg.data
@@ -58,12 +61,16 @@ class FusionHeading(Node):
             self._init_n += 1
             if self._init_n >= self.init_samples:
                 self._offset = math.degrees(math.atan2(self._init_sin, self._init_cos))
+                self.get_logger().info(f'offset inicial fijado: {self._offset:.1f} deg (gyro->ENU)')
             return
         residual = wrap180(target - self._offset)
         self._offset = wrap180(self._offset + self.offset_alpha * residual)
         self._converge_count = self._converge_count + 1 if abs(residual) <= self.converge_tol_deg else 0
-        if self._converge_count >= self.converge_min_samples:
+        if not self._converged and self._converge_count >= self.converge_min_samples:
             self._converged = True
+            self.get_logger().info(
+                f'heading convergido (|residual|<{self.converge_tol_deg:.0f}deg x{self.converge_min_samples}) '
+                f'-> publicando /heading/fused')
 
 
 def main(args=None):

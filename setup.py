@@ -53,6 +53,7 @@ setup(
             # Adapters MQTT: bridges (nodos transport ROS <-> MQTT)
             'command_bridge = buey_robot.adapters.mqtt.command_bridge:main',
             'telemetry_bridge = buey_robot.adapters.mqtt.telemetry_bridge:main',
+            'log_bridge = buey_robot.adapters.mqtt.log_bridge:main',
         ],
     },
 )

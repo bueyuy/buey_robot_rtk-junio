@@ -14,11 +14,6 @@ def quaternion_to_yaw(qx: float, qy: float, qz: float, qw: float) -> float:
     return math.atan2(siny_cosp, cosy_cosp)
 
 
-def angle_normalize(angle: float) -> float:
-    """Normaliza un angulo a [-pi, pi]."""
-    return math.atan2(math.sin(angle), math.cos(angle))
-
-
 def angle_diff(target: float, current: float) -> float:
     """Calcula la diferencia angular mas corta (target - current), normalizada a [-pi, pi]."""
     return math.atan2(
