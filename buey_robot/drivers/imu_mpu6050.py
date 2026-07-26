@@ -1,7 +1,7 @@
 """Driver del IMU MPU6050: resta el bias del gyro (auto-calibrado en reposo) e
 integra el yaw rate -> heading relativo.
 
-Publica  /imu/heading (deg, solo tras calibrar), /imu/rate (rad/s), /imu/status.
+Publica  /imu/yaw (deg, solo tras calibrar), /imu/rate (rad/s), /imu/status.
 Escucha  /imu/calibrate (Empty) para recalibrar on-demand.
 """
 
@@ -13,7 +13,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Float32, String, Empty
 
-from buey_robot.contracts import IMU_HEADING, IMU_RATE, IMU_STATUS, IMU_CALIBRATE
+from buey_robot.contracts import IMU_YAW, IMU_RATE, IMU_STATUS, IMU_CALIBRATE
 from buey_robot.utils.params import load_params
 
 PARAMS = {
@@ -42,14 +42,14 @@ class ImuMpu6050(Node):
         self._acc_sq_z = 0.0                # suma wz^2 -> std del yaw rate (gyro muerto)
         self._n = 0
 
-        self._heading_pub = self.create_publisher(Float32, IMU_HEADING, 10)
+        self._yaw_pub = self.create_publisher(Float32, IMU_YAW, 10)
         self._rate_pub = self.create_publisher(Float32, IMU_RATE, 10)
         self._status_pub = self.create_publisher(String, IMU_STATUS, 10)
         self.create_subscription(Imu, self.imu_topic, self._on_imu, 10)
         self.create_subscription(Empty, IMU_CALIBRATE, self._on_calibrate, 10)
 
         self.get_logger().info(
-            f'imu_mpu6050: {self.imu_topic} -> {IMU_HEADING} (+ {IMU_RATE}); '
+            f'imu_mpu6050: {self.imu_topic} -> {IMU_YAW} (+ {IMU_RATE}); '
             f'auto-bias ON ({self.auto_samples} muestras, robot QUIETO)')
 
     def _on_imu(self, msg: Imu):
@@ -73,7 +73,7 @@ class ImuMpu6050(Node):
                 dpsi = -cwz * dt if self.heading_invert else cwz * dt
                 self._heading_deg = (self._heading_deg + math.degrees(dpsi)) % 360.0
 
-        self._heading_pub.publish(Float32(data=float(self._heading_deg)))
+        self._yaw_pub.publish(Float32(data=float(self._heading_deg)))
         self._publish_status()
 
     def _publish_status(self):
@@ -85,7 +85,7 @@ class ImuMpu6050(Node):
 
     def _on_calibrate(self, msg: Empty):
         """Recalibracion on-demand: reinicia el auto-bias (robot recien parado y quieto).
-        Mientras recalibra deja de publicar /imu/heading -> el controller lo lee como
+        Mientras recalibra deja de publicar /imu/yaw -> el consumidor lo lee como
         'no calibrado' hasta que reaparece."""
         self.get_logger().info('Recalibracion solicitada — reiniciando auto-bias')
         self._calibrating = True
@@ -98,8 +98,8 @@ class ImuMpu6050(Node):
     def _collect_bias(self, wx, wy, wz):
         """Promedia el gyro con el robot quieto para estimar el bias, y valida que el
         gyro este VIVO: un gyro real en reposo tiene ruido (std > 0); un topic sin gyro
-        o congelado da wz==0.0 exacto (std ~ 0) -> NO completa -> no publica /imu/heading
-        -> el controller queda bloqueado en vez de navegar con heading muerto."""
+        o congelado da wz==0.0 exacto (std ~ 0) -> NO completa -> no publica /imu/yaw
+        -> el consumidor queda bloqueado en vez de navegar con heading muerto."""
         if math.sqrt(wx * wx + wy * wy + wz * wz) > self.stationary_thresh:
             if self._n > 0:
                 self.get_logger().warn(

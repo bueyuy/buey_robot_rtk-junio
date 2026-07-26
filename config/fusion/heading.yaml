@@ -1,5 +1,5 @@
 # Fusion de heading: IMU (giros) + COG del GPS (referencia absoluta) -> heading absoluto.
-heading_fusion:
+fusion_heading:
   ros__parameters:
     offset_alpha: 0.10                    # EMA del offset, tau~10s
     offset_init_samples: 5                # muestras para el snap inicial

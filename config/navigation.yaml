@@ -5,6 +5,7 @@
 
     controller:
       frequency_hz: 10.0                   # Hz del lazo de control
+      odom_timeout_s: 0.5                   # s: antiguedad max del ultimo /odom para navegar (staleness)
       goal:
         position_tolerance_m: 0.5          # m: distancia al WP para darlo por alcanzado y pasar al siguiente
         alignment_tolerance_deg: 10.0      # grados: error de rumbo maximo antes de dejar de girar y avanzar
@@ -17,26 +18,13 @@
         proportional_gain: 0.5             # ganancia P de correccion de rumbo en recta (bajo = suave ante ruido)
       deceleration:
         distance_m: 2.0                    # m: distancia al WP donde empieza a desacelerar
-      ramp:
-        accel_rate_linear: 0.015           # rampa: aceleracion lineal por tick
-        decel_rate_linear: 0.03            # rampa: desaceleracion lineal por tick
-        accel_rate_angular: 0.03           # rampa: aceleracion angular por tick
-        decel_rate_angular: 0.03           # rampa: desaceleracion angular por tick
-      prealign:
-        enabled: true                      # creep recto inicial antes de navegar (genera COG, alinea el heading fused)
-        distance_m: 1.0                    # m: minimo a avanzar recto antes de poder navegar
-        require_fused_convergence: true    # no soltar la nav hasta que converja el heading fused (/heading/fused_ready)
-        max_distance_m: 3.0                # m: tope del creep si la convergencia nunca llega
-      wait_for_gyro_calibration: true      # robot quieto hasta que el gyro termine su auto-bias
-      trigger_gyro_calibration: true       # recalibrar el gyro fresco al arrancar la nav (robot recien parado en el inicio)
 
-    gps:
-      heading:
-        min_movement_threshold: 0.25       # m/s: por debajo de esto congela el ultimo heading bueno (evita ruido RTK)
-        filter_alpha: 0.15                 # suavizado exponencial del heading GPS
-      imu:
-        use_imu_heading: true              #  MOVERLO FUERA DE GPS... A rtk adopta /heading/fused (gyro+COG GPS) como heading; false = solo COG GPS
-        heading_topic: "/heading/fused"    # topic del heading que consume rtk
+    initializer:
+      rate_hz: 10.0                        # Hz del lazo de la maniobra
+      straight_speed_m_s: 0.2              # m/s avanzando recto para generar COG
+      min_distance_m: 1.0                  # m minimos antes de poder soltar la nav
+      max_distance_m: 3.0                  # m: tope si el heading nunca converge
+      calib_settle_s: 2.0                  # s de gracia tras el trigger de recalibracion del gyro
 
     joystick:
       cruise_linear_m_s: 0.3               # m/s: velocidad lineal del joystick
@@ -44,8 +32,3 @@
       max_angular_rad_s: 0.6               # rad/s: tope angular del joystick
       frequency_hz: 10.0                   # Hz del lazo de joystick
       timeout_ms: 600.0                    # ms: sin comando joystick por este tiempo -> cede a la nav autonoma
-      ramp:
-        accel_rate_linear: 0.03            # rampa joystick: aceleracion lineal
-        decel_rate_linear: 0.03            # rampa joystick: desaceleracion lineal
-        accel_rate_angular: 0.03           # rampa joystick: aceleracion angular
-        decel_rate_angular: 0.03           # rampa joystick: desaceleracion angular

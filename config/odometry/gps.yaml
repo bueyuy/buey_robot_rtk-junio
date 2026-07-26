@@ -1,7 +1,7 @@
-# Odometria RTK: /gps/fix -> /odom_filtered. El offset de antena vive en robot.yaml.
-rtk_odometry:
+# Odometria GPS: /gps/fix -> /odom. El offset de antena vive en robot.yaml.
+odometry_gps:
   ros__parameters:
-    gps.frame_id: "gps_link"              # child_frame_id del /odom_filtered
+    gps.frame_id: "gps_link"              # child_frame_id del /odom
     gps.allow_float: true                 # publicar odom con RTK Float (no exigir Fixed)
     gps.filter.enabled: true              # media movil sobre la posicion
     gps.filter.window_size: 5             # muestras de la media movil

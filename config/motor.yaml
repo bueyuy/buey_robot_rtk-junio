@@ -20,3 +20,26 @@
       safety:
         joystick_timeout_ms: 600.0  # ms sin joystick -> liberar prioridad
         watchdog_timeout_ms: 500.0  # ms sin cmd_vel -> motores a 0 (futuro)
+
+    # Capa velocity: mux por prioridad + rampa por fuente (delta max por tick)
+    velocity:
+      rate_hz: 20.0                 # Hz del lazo de salida a motores
+      source_timeout_ms: 600.0      # ms sin msg de una fuente -> inactiva
+      brake:
+        linear: 0.05                # rampa al frenar (sin fuente activa)
+        angular: 0.08
+      nav:                          # perfil navegacion (suave)
+        accel_linear: 0.015
+        decel_linear: 0.03
+        accel_angular: 0.03
+        decel_angular: 0.03
+      joy:                          # perfil joystick (snappy)
+        accel_linear: 0.03
+        decel_linear: 0.03
+        accel_angular: 0.03
+        decel_angular: 0.03
+      init:                         # perfil maniobra de arranque
+        accel_linear: 0.015
+        decel_linear: 0.03
+        accel_angular: 0.03
+        decel_angular: 0.03

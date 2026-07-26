@@ -1,116 +1,107 @@
-"""Motor Gateway: Pipeline minimo cmd_vel -> motores via output inyectado.
-
-Reactivo: ejecuta el pipeline cada vez que recibe un mensaje en /cmd_vel o /cmd_vel_joy.
-Joystick (/cmd_vel_joy) tiene prioridad sobre navegacion (/cmd_vel).
-
-Pipeline:
-    1. Seleccion input (joy > nav, con timeout)
-    2. Watchdog (sin input -> envia 0,0)
-    3. Gains (linear_gain, angular_gain)
-    4. Cinematica diferencial
-    5. Clamp a [-max_output, max_output]
-    6. Soft deadzone
-    7. Output via objeto inyectado (MqttMotorOutput o similar)
-"""
-
-import time
+"""Motor Gateway: mux por prioridad (joy>init>nav) + rampa por fuente + cinematica
+diferencial + clamp de rueda -> motores (via output inyectado). Corre a rate fijo:
+toma la fuente activa mas prioritaria, rampa hacia su velocidad objetivo con el perfil
+de esa fuente, y baja a ruedas."""
 
 import rclpy
 from rclpy.node import Node
-from rclpy.parameter import Parameter
 from geometry_msgs.msg import Twist
 
 from buey_robot.adapters.mqtt.client import get_client
-from buey_robot.adapters.mqtt.outputs.motor import MqttMotorOutput
-from buey_robot.motor.filters import SoftDeadzone
+from buey_robot.adapters.mqtt.motor_output import MqttMotorOutput
+from buey_robot.motor.filters import SlewRateLimiter
 from buey_robot.motor.kinematics import differential_to_motor
 from buey_robot.utils.config import load_config
+from buey_robot.utils.params import load_params
+from buey_robot.contracts import NAV_CMD_VEL, JOY_CMD_VEL, INIT_CMD_VEL
+
+PARAMS = {
+    'L': ('motor_control.wheel_separation', float),
+    'max_output': ('motor_control.max_output', float),
+    'linear_gain': ('motor_control.linear_gain', float),
+    'angular_gain': ('motor_control.angular_gain', float),
+    'rate': ('velocity.rate_hz', float),
+    'source_timeout_ms': ('velocity.source_timeout_ms', float),
+    'brake_lin': ('velocity.brake.linear', float),
+    'brake_ang': ('velocity.brake.angular', float),
+    'nav_al': ('velocity.nav.accel_linear', float),
+    'nav_dl': ('velocity.nav.decel_linear', float),
+    'nav_aa': ('velocity.nav.accel_angular', float),
+    'nav_da': ('velocity.nav.decel_angular', float),
+    'joy_al': ('velocity.joy.accel_linear', float),
+    'joy_dl': ('velocity.joy.decel_linear', float),
+    'joy_aa': ('velocity.joy.accel_angular', float),
+    'joy_da': ('velocity.joy.decel_angular', float),
+    'init_al': ('velocity.init.accel_linear', float),
+    'init_dl': ('velocity.init.decel_linear', float),
+    'init_aa': ('velocity.init.accel_angular', float),
+    'init_da': ('velocity.init.decel_angular', float),
+}
 
 
 class MotorGateway(Node):
+    PRIORITY = ('joy', 'init', 'nav')
+
     def __init__(self):
         super().__init__('motor_gateway')
+        load_params(self, PARAMS)
 
-        # --- Parametros de motor (ROS2 estandar, sin defaults) ---
-        self.declare_parameter('motor_control.wheel_separation', Parameter.Type.DOUBLE)
-        self.declare_parameter('motor_control.max_output', Parameter.Type.DOUBLE)
-        self.declare_parameter('motor_control.linear_gain', Parameter.Type.DOUBLE)
-        self.declare_parameter('motor_control.angular_gain', Parameter.Type.DOUBLE)
-        self.declare_parameter('motor_control.soft_deadzone.low', Parameter.Type.DOUBLE)
-        self.declare_parameter('motor_control.soft_deadzone.high', Parameter.Type.DOUBLE)
-        self.declare_parameter('motor_control.safety.joystick_timeout_ms', Parameter.Type.DOUBLE)
-
-        # Parametros de cinematica
-        self.L = self.get_parameter('motor_control.wheel_separation').value
-        self.max_output = self.get_parameter('motor_control.max_output').value
-        self.linear_gain = self.get_parameter('motor_control.linear_gain').value
-        self.angular_gain = self.get_parameter('motor_control.angular_gain').value
-
-        # Soft deadzone
-        dz_low = self.get_parameter('motor_control.soft_deadzone.low').value
-        dz_high = self.get_parameter('motor_control.soft_deadzone.high').value
-        self.deadzone = SoftDeadzone(dz_low, dz_high)
-
-        # Safety timeouts
-        self.joy_timeout = self.get_parameter('motor_control.safety.joystick_timeout_ms').value / 1000.0
-
-        # Cliente MQTT: mqtt.yaml se sigue leyendo con load_config (no es param ROS2)
         mqtt_cfg = load_config('mqtt.yaml')
         self._mqtt = get_client(mqtt_cfg, logger=self.get_logger())
+        self._output = MqttMotorOutput(self._mqtt, mqtt_cfg)
 
-        # Output inyectado: usa el cliente compartido
-        self.output = MqttMotorOutput(self._mqtt, mqtt_cfg)
+        self._vramp = SlewRateLimiter(0.0, 0.0)
+        self._wramp = SlewRateLimiter(0.0, 0.0)
+        self._profiles = {
+            'nav': (self.nav_al, self.nav_dl, self.nav_aa, self.nav_da),
+            'joy': (self.joy_al, self.joy_dl, self.joy_aa, self.joy_da),
+            'init': (self.init_al, self.init_dl, self.init_aa, self.init_da),
+        }
+        self._target = {n: (0.0, 0.0) for n in self.PRIORITY}
+        self._stamp = {n: 0.0 for n in self.PRIORITY}
+        self._timeout = self.source_timeout_ms / 1000.0
 
-        # Timestamps de ultimo mensaje recibido
-        self._joy_stamp = 0.0
-        self._nav_stamp = 0.0
+        self.create_subscription(Twist, NAV_CMD_VEL, lambda m: self._on_cmd('nav', m), 10)
+        self.create_subscription(Twist, JOY_CMD_VEL, lambda m: self._on_cmd('joy', m), 10)
+        self.create_subscription(Twist, INIT_CMD_VEL, lambda m: self._on_cmd('init', m), 10)
+        self.create_timer(1.0 / self.rate, self._tick)
 
-        # Subscribers ROS2
-        self.create_subscription(Twist, '/cmd_vel', self._cmd_vel_callback, 10)
-        self.create_subscription(Twist, '/cmd_vel_joy', self._cmd_vel_joy_callback, 10)
+    def _now(self):
+        return self.get_clock().now().nanoseconds * 1e-9
 
-        self.get_logger().info('Motor Gateway iniciado (reactivo, output inyectado)')
-        self.get_logger().info(f'  L={self.L}, gains=({self.linear_gain}, {self.angular_gain})')
-        self.get_logger().info(f'  Soft deadzone: low={dz_low}, high={dz_high}')
+    def _on_cmd(self, name, msg):
+        self._target[name] = (msg.linear.x, msg.angular.z)
+        self._stamp[name] = self._now()
 
-    def _cmd_vel_callback(self, msg: Twist):
-        """Recibe cmd_vel de navegacion. Ignora si joystick esta activo."""
-        now = time.time()
-        self._nav_stamp = now
-        if (now - self._joy_stamp) < self.joy_timeout:
-            return
-        self._run_pipeline(msg.linear.x, msg.angular.z)
+    def _active(self):
+        now = self._now()
+        for name in self.PRIORITY:
+            if now - self._stamp[name] < self._timeout:
+                return name
+        return None
 
-    def _cmd_vel_joy_callback(self, msg: Twist):
-        """Recibe cmd_vel_joy de joystick. Siempre tiene prioridad."""
-        self._joy_stamp = time.time()
-        self._run_pipeline(msg.linear.x, msg.angular.z)
-
-    def _run_pipeline(self, v: float, w: float):
-        """Pipeline: gains -> cinematica -> clamp -> deadzone -> output."""
-        # 1. Gains
-        v_scaled = v * self.linear_gain
-        w_scaled = w * self.angular_gain
-
-        # 2. Cinematica diferencial
-        velL, velR = differential_to_motor(v_scaled, w_scaled, self.L)
-
-        # 3. Clamp
+    def _tick(self):
+        name = self._active()
+        if name is None:
+            tv, tw = 0.0, 0.0
+            self._vramp.set_rates(self.brake_lin, self.brake_lin)
+            self._wramp.set_rates(self.brake_ang, self.brake_ang)
+        else:
+            tv, tw = self._target[name]
+            al, dl, aa, da = self._profiles[name]
+            self._vramp.set_rates(al, dl)
+            self._wramp.set_rates(aa, da)
+        v = self._vramp.apply(tv)
+        w = self._wramp.apply(tw)
+        velL, velR = differential_to_motor(v * self.linear_gain, w * self.angular_gain, self.L)
         velL = max(-self.max_output, min(self.max_output, velL))
         velR = max(-self.max_output, min(self.max_output, velR))
-
-        # 4. Soft deadzone (deshabilitado para pruebas)
-        # velL = self.deadzone.apply(velL)
-        # velR = self.deadzone.apply(velR)
-
-        # 5. Output
-        self.output.send(velL, velR, v, w)
+        self._output.send(velL, velR, v, w)
 
 
 def main(args=None):
     rclpy.init(args=args)
     node = MotorGateway()
-
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

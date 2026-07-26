@@ -1,4 +1,4 @@
-"""GPS NMEA driver: publica /gps/fix (GPSFix), /gps/heading (Float32, solo cuando el
+"""GPS NMEA driver: publica /gps/fix (GPSFix), /gps/course (Float32, solo cuando el
 COG es confiable) y /gps/status."""
 
 import json
@@ -10,7 +10,7 @@ from std_msgs.msg import String, Float32
 
 from buey_robot.adapters.serial.serial_lines import SerialLineReader
 from buey_robot.drivers.nmea_parser import NmeaParser
-from buey_robot.contracts import GPS_FIX, GPS_HEADING, GPS_STATUS
+from buey_robot.contracts import GPS_FIX, GPS_COURSE, GPS_STATUS
 from buey_robot.utils.params import load_params
 
 _KNOTS_TO_MS = 0.514444
@@ -29,7 +29,7 @@ PARAMS = {
 QUALITY_NAMES = {0: 'No Fix', 1: 'GPS', 2: 'DGPS', 4: 'RTK Fixed', 5: 'RTK Float'}
 
 
-class GPSNmeaDriver(Node):
+class GpsNmea(Node):
     def __init__(self):
         super().__init__('gps_nmea')
 
@@ -37,7 +37,7 @@ class GPSNmeaDriver(Node):
         self._last_quality = None       # para loguear cambios de calidad
 
         self._gps_pub = self.create_publisher(GPSFix, GPS_FIX, 10)
-        self._heading_pub = self.create_publisher(Float32, GPS_HEADING, 10)
+        self._course_pub = self.create_publisher(Float32, GPS_COURSE, 10)
         self._status_pub = self.create_publisher(String, GPS_STATUS, 10)
 
         self._parser = NmeaParser()
@@ -83,8 +83,8 @@ class GPSNmeaDriver(Node):
         self.get_logger().info(f'GPS calidad: {old} -> {new} (sats={data["satellites"]})')
         self._last_quality = data['quality']
 
-    def _publish_gps_heading(self, data: dict):
-        """Publica /gps/heading (COG -> yaw ENU) SOLO cuando es confiable: en movimiento
+    def _publish_course(self, data: dict):
+        """Publica /gps/course (COG -> yaw ENU) SOLO cuando es confiable: en movimiento
         (el COG es basura quieto) y, si require_rtk, con fix RTK. Si no, no publica."""
         cog, speed_knots = data.get('cog'), data.get('speed_knots')
         if cog is None or speed_knots is None:
@@ -93,12 +93,12 @@ class GPSNmeaDriver(Node):
             return
         if self.heading_require_rtk and data['quality'] < 4:
             return
-        self._heading_pub.publish(Float32(data=float((90.0 - cog) % 360.0)))
+        self._course_pub.publish(Float32(data=float((90.0 - cog) % 360.0)))
 
     def _on_fix(self, data: dict):
         """Recibe un fix del parser, aplica gates de calidad y publica /gps/fix + /gps/status."""
         self._log_quality(data)
-        self._publish_gps_heading(data)
+        self._publish_course(data)
 
         if data['lat'] is None or data['lon'] is None:
             self.get_logger().warn(
@@ -149,7 +149,7 @@ class GPSNmeaDriver(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = GPSNmeaDriver()
+    node = GpsNmea()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

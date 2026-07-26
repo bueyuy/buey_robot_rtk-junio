@@ -48,11 +48,19 @@ class EMAFilter:
 
 
 class SlewRateLimiter:
-    """Limita el cambio maximo entre ciclos. Por ahora pass-through."""
+    """Limita el cambio maximo por tick. accel_rate alejandose de 0, decel_rate acercandose."""
 
-    def __init__(self, slew_rate: float = 10.0, slew_rate_stop: float = 20.0):
-        self.slew_rate = slew_rate
-        self.slew_rate_stop = slew_rate_stop
+    def __init__(self, accel_rate: float, decel_rate: float):
+        self.accel_rate = accel_rate
+        self.decel_rate = decel_rate
+        self._value = 0.0
 
-    def apply(self, value: float) -> float:
-        return value
+    def set_rates(self, accel_rate: float, decel_rate: float):
+        self.accel_rate = accel_rate
+        self.decel_rate = decel_rate
+
+    def apply(self, target: float) -> float:
+        rate = self.accel_rate if abs(target) >= abs(self._value) else self.decel_rate
+        delta = max(-rate, min(rate, target - self._value))
+        self._value += delta
+        return self._value

@@ -3,12 +3,12 @@
 
   - motor_gateway (joystick_controller + motor_gateway)   [drive manual + salida a motores]
   - micro_ros_agent                                        [agente serial de la IMU]
-  - drivers/gps_nmea.py       (serial NMEA -> /gps/fix + rtk/location/json)   [SENSORES]
-  - drivers/imu_mpu6050.py    (/mpu6050/imu/data -> /imu/heading + /imu/rate)
-  - fusion/heading.py         (/imu/heading + /gps/fix -> /heading/fused)
-  - odometry/rtk.py           (GPS + heading -> /odom_filtered)
-  - adapters/mqtt/outputs/pose.py + imu_bridge             [TELEMETRIA MQTT]
-  - navigation/controller.py                               [NAV_CONTROLLER]
+  - drivers/gps_nmea.py       (serial NMEA -> /gps/fix + /gps/course)   [SENSORES]
+  - drivers/imu_mpu6050.py    (/mpu6050/imu/data -> /imu/yaw + /imu/rate)
+  - fusion/heading.py         (/imu/yaw + /gps/course -> /heading/fused)
+  - odometry/gps.py           (GPS + heading -> /odom; ruta geo -> /local/route)
+  - adapters/mqtt/telemetry_bridge.py + command_bridge.py  [TRANSPORTE MQTT]
+  - navigation/controller.py + initializer.py              [NAV]
 
 Navegacion FULL RTK con geolocalizacion DINAMICA: la ruta de waypoints llega en vivo
 por MQTT (bueyuy/waypoints, lat/lon) desde la telemetria. NO hay waypoints fijos ni
@@ -38,7 +38,7 @@ def generate_launch_description():
     gps_yaml = os.path.join(pkg_share, 'config', 'drivers', 'gps_nmea.yaml')
     imu_yaml = os.path.join(pkg_share, 'config', 'drivers', 'imu_mpu6050.yaml')
     fusion_yaml = os.path.join(pkg_share, 'config', 'fusion', 'heading.yaml')
-    rtk_yaml = os.path.join(pkg_share, 'config', 'odometry', 'rtk.yaml')
+    gps_odom_yaml = os.path.join(pkg_share, 'config', 'odometry', 'gps.yaml')
     motor_yaml = os.path.join(pkg_share, 'config', 'motor.yaml')
 
     # --- motor_gateway (joystick + salida a motores) ---
@@ -63,35 +63,41 @@ def generate_launch_description():
         output='screen', parameters=[imu_yaml],
     )
 
-    # --- FUSION (agnostica): /imu/heading + /gps/fix -> /heading/fused ---
+    # --- FUSION (agnostica): /imu/yaw + /gps/course -> /heading/fused ---
     fusion_node = Node(
-        package='buey_robot', executable='heading_fusion', name='heading_fusion',
+        package='buey_robot', executable='fusion_heading', name='fusion_heading',
         output='screen', parameters=[fusion_yaml],
     )
 
     # --- ODOMETRIA + TELEMETRIA (delay para que los sensores arranquen) ---
-    rtk_odom_node = Node(  # robot.yaml aporta el lever-arm de la antena
-        package='buey_robot', executable='rtk_odometry', name='rtk_odometry',
-        output='screen', parameters=[rtk_yaml, robot_yaml],
+    odometry_gps_node = Node(  # robot.yaml aporta el lever-arm de la antena
+        package='buey_robot', executable='odometry_gps', name='odometry_gps',
+        output='screen', parameters=[gps_odom_yaml, robot_yaml],
     )
-    pose_node = Node(
-        package='buey_robot', executable='pose_publisher', name='pose_publisher',
-        output='screen',
-    )
-    imu_bridge_node = Node(
-        package='buey_robot', executable='imu_bridge', name='imu_bridge',
+    telemetry_bridge_node = Node(
+        package='buey_robot', executable='telemetry_bridge', name='telemetry_bridge',
         output='screen',
     )
     odom_telemetry = TimerAction(
-        period=2.0, actions=[rtk_odom_node, pose_node, imu_bridge_node])
+        period=2.0, actions=[odometry_gps_node, telemetry_bridge_node])
 
-    # --- NAV_CONTROLLER (delay para que /odom_filtered ya publique) ---
+    # --- NAV_CONTROLLER + bridge de comandos (delay para que /odom ya publique) ---
     controller_node = Node(
-        package='buey_robot', executable='trajectory_controller',
-        name='trajectory_controller', output='screen',
+        package='buey_robot', executable='navigation_controller',
+        name='navigation_controller', output='screen',
         parameters=[nav_yaml, motor_yaml],
     )
-    controller = TimerAction(period=6.0, actions=[controller_node])
+    initializer_node = Node(
+        package='buey_robot', executable='navigation_initializer',
+        name='navigation_initializer', output='screen',
+        parameters=[nav_yaml],
+    )
+    command_bridge_node = Node(
+        package='buey_robot', executable='command_bridge', name='command_bridge',
+        output='screen',
+    )
+    controller = TimerAction(
+        period=6.0, actions=[controller_node, initializer_node, command_bridge_node])
 
     return LaunchDescription([
         motor_gateway,

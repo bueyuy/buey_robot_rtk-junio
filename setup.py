@@ -33,25 +33,26 @@ setup(
     entry_points={
         'console_scripts': [
             # Navigation
-            'trajectory_controller = buey_robot.navigation.controller:main',
+            'navigation_controller = buey_robot.navigation.controller:main',
+            'navigation_initializer = buey_robot.navigation.initializer:main',
             'joystick_controller = buey_robot.navigation.joystick:main',
 
             # Odometry
-            'rtk_odometry = buey_robot.odometry.rtk:main',
+            'odometry_gps = buey_robot.odometry.gps:main',
 
             # Drivers (especificos del modelo) -> contrato /imu/*, /gps/fix
             'imu_mpu6050 = buey_robot.drivers.imu_mpu6050:main',
             'gps_nmea = buey_robot.drivers.gps_nmea:main',
 
-            # Fusion (agnostica del sensor): /imu/heading + /gps/fix -> /heading/fused
-            'heading_fusion = buey_robot.fusion.heading:main',
+            # Fusion (agnostica del sensor): /imu/yaw + /gps/course -> /heading/fused
+            'fusion_heading = buey_robot.fusion.heading:main',
 
             # Motor
             'motor_gateway = buey_robot.motor.gateway:main',
 
-            # Adapters MQTT outputs (nodos)
-            'pose_publisher = buey_robot.adapters.mqtt.outputs.pose:main',
-            'imu_bridge = buey_robot.adapters.mqtt.outputs.imu_bridge:main',
+            # Adapters MQTT: bridges (nodos transport ROS <-> MQTT)
+            'command_bridge = buey_robot.adapters.mqtt.command_bridge:main',
+            'telemetry_bridge = buey_robot.adapters.mqtt.telemetry_bridge:main',
         ],
     },
 )
