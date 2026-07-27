@@ -1,8 +1,5 @@
-"""CommandBridge: trae comandos de afuera (MQTT) al stack ROS. Parsea la ruta de
-waypoints (lat/lon) y el GO, y los publica como topics ROS. Transporte puro: NO
-convierte coordenadas (eso lo hace OdometryGps, el unico bilingue)."""
-
-import json
+"""CommandBridge: relay puro MQTT -> ROS. La web publica el formato ROS a bueyuy/<topic>
+y esto lo reenvia verbatim al topic ROS. NO convierte coordenadas (eso lo hace OdometryGps)."""
 
 import rclpy
 from rclpy.node import Node
@@ -10,7 +7,7 @@ from rclpy.qos import QoSProfile, DurabilityPolicy, HistoryPolicy
 from std_msgs.msg import String, Empty
 
 from buey_robot.adapters.mqtt.client import get_client
-from buey_robot.utils.config import load_config, require_key
+from buey_robot.utils.config import load_config
 from buey_robot.contracts import GEO_ROUTE, NAV_START
 
 
@@ -20,38 +17,23 @@ class CommandBridge(Node):
         mqtt_cfg = load_config('mqtt.yaml')
         self._mqtt = get_client(mqtt_cfg, logger=self.get_logger())
 
+        # Salidas: topics ROS
         # /geo/route retiene el ultimo valor: si OdometryGps arranca despues, igual lo recibe.
         retained = QoSProfile(depth=1, history=HistoryPolicy.KEEP_LAST,
                               durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self._route_pub = self.create_publisher(String, GEO_ROUTE, retained)
         self._start_pub = self.create_publisher(Empty, NAV_START, 10)
 
-        self._mqtt.subscribe(require_key(mqtt_cfg, 'topics', 'waypoints'), self._on_waypoints)
-        self._mqtt.subscribe(require_key(mqtt_cfg, 'topics', 'nav_start'), self._on_start)
-        self.get_logger().info('command_bridge iniciado (MQTT waypoints/start -> /geo/route, /nav/start)')
+        # Entradas: broker MQTT
+        self._mqtt.subscribe('bueyuy' + GEO_ROUTE, self._on_route)
+        self._mqtt.subscribe('bueyuy' + NAV_START, self._on_start)
+        self.get_logger().info('command_bridge iniciado (bueyuy/geo/route, bueyuy/nav/start -> ROS)')
 
-    def _on_waypoints(self, client, userdata, msg):
-        route = self._parse(msg)
-        if route is None:                  # payload invalido -> no republicar (lista vacia SI: idle)
-            return
-        self._route_pub.publish(String(data=json.dumps(route)))
+    def _on_route(self, client, userdata, msg):
+        self._route_pub.publish(String(data=msg.payload.decode()))
 
     def _on_start(self, client, userdata, msg):
         self._start_pub.publish(Empty())
-
-    @staticmethod
-    def _parse(msg):
-        # MQTT: {waypoints_gps:[{lat,lon}], loop} -> ROS: {waypoints:[{lat,lon}], loop}
-        try:
-            raw = json.loads(msg.payload.decode())
-            points = raw.get('waypoints_gps')
-            if not isinstance(points, list):
-                return None
-            wps = [{'lat': float(p['lat']), 'lon': float(p['lon'])} for p in points
-                   if isinstance(p, dict) and 'lat' in p and 'lon' in p]
-            return {'waypoints': wps, 'loop': bool(raw.get('loop', False))}
-        except Exception:
-            return None
 
 
 def main(args=None):

@@ -1,9 +1,4 @@
-"""Driver del IMU MPU6050: resta el bias del gyro (auto-calibrado en reposo) e
-integra el yaw rate -> heading relativo.
-
-Publica  /imu/yaw (deg, solo tras calibrar), /imu/rate (rad/s), /imu/status.
-Escucha  /imu/calibrate (Empty) para recalibrar on-demand.
-"""
+"""Driver IMU MPU6050: bias del gyro (auto-calibrado en reposo) + integra yaw rate -> /imu/yaw."""
 
 import json
 import math
@@ -18,12 +13,12 @@ from buey_robot.utils.params import load_params
 
 PARAMS = {
     'imu_topic': str,
-    'bias_z': ('gyro_bias_z', float),
-    'auto_samples': ('auto_bias_samples', int),
-    'stationary_thresh': float,
-    'gyro_alive_min_std': float,
-    'heading_initial': ('heading_initial_deg', float),
-    'heading_invert': bool,
+    'bias_z': ('gyro.bias_z', float),
+    'auto_samples': ('gyro.auto_bias_samples', int),
+    'stationary_thresh': ('gyro.stationary_thresh', float),
+    'gyro_alive_min_std': ('gyro.alive_min_std', float),
+    'heading_initial': ('heading.initial_deg', float),
+    'heading_invert': ('heading.invert', bool),
 }
 
 
@@ -42,9 +37,12 @@ class ImuMpu6050(Node):
         self._acc_sq_z = 0.0                # suma wz^2 -> std del yaw rate (gyro muerto)
         self._n = 0
 
+        # Salidas
         self._yaw_pub = self.create_publisher(Float32, IMU_YAW, 10)
         self._rate_pub = self.create_publisher(Float32, IMU_RATE, 10)
         self._status_pub = self.create_publisher(String, IMU_STATUS, 10)
+
+        # Entradas
         self.create_subscription(Imu, self.imu_topic, self._on_imu, 10)
         self.create_subscription(Empty, IMU_CALIBRATE, self._on_calibrate, 10)
 
@@ -84,9 +82,7 @@ class ImuMpu6050(Node):
         })))
 
     def _on_calibrate(self, msg: Empty):
-        """Recalibracion on-demand: reinicia el auto-bias (robot recien parado y quieto).
-        Mientras recalibra deja de publicar /imu/yaw -> el consumidor lo lee como
-        'no calibrado' hasta que reaparece."""
+        """Reinicia el auto-bias (deja de publicar /imu/yaw hasta recalibrar)."""
         self.get_logger().info('Recalibracion solicitada — reiniciando auto-bias')
         self._calibrating = True
         self._acc_z = 0.0
@@ -96,10 +92,9 @@ class ImuMpu6050(Node):
         self._heading_deg = self.heading_initial
 
     def _collect_bias(self, wx, wy, wz):
-        """Promedia el gyro con el robot quieto para estimar el bias, y valida que el
-        gyro este VIVO: un gyro real en reposo tiene ruido (std > 0); un topic sin gyro
-        o congelado da wz==0.0 exacto (std ~ 0) -> NO completa -> no publica /imu/yaw
-        -> el consumidor queda bloqueado en vez de navegar con heading muerto."""
+        """Promedia el gyro quieto para el bias, y valida que este VIVO: un topic muerto da
+        wz==0.0 exacto (std~0) -> no completa -> no publica /imu/yaw (mejor bloquear que
+        navegar con heading muerto)."""
         if math.sqrt(wx * wx + wy * wy + wz * wz) > self.stationary_thresh:
             if self._n > 0:
                 self.get_logger().warn(

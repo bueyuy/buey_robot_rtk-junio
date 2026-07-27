@@ -1,5 +1,5 @@
-"""MqttMotorOutput: salida de motores por MQTT. La inyecta MotorGateway (motor/ no
-importa paho). Publica bueyuy/navigation/motors ("velL&velR") y cmd_vel de debug."""
+"""MqttMotorOutput: salida de motores por MQTT. La inyecta MotorGateway (motor/ no importa
+paho). Motores a rate de control; cmd_vel es telemetria (el gateway lo throttlea)."""
 
 from buey_robot.adapters.mqtt.client import MqttClient
 from buey_robot.utils.config import require_key
@@ -11,7 +11,8 @@ class MqttMotorOutput:
         self.topic_motors = require_key(mqtt_cfg, 'topics', 'motors')
         self.topic_cmd_vel = require_key(mqtt_cfg, 'topics', 'cmd_vel_debug')
 
-    def send(self, velL: float, velR: float, v: float = 0.0, w: float = 0.0):
+    def send_motors(self, velL: float, velR: float):
         self._client.publish(self.topic_motors, f"{velL:.2f}&{velR:.2f}")
-        if v != 0.0 or w != 0.0:
-            self._client.publish(self.topic_cmd_vel, f"{v:.3f}&{w:.3f}")
+
+    def send_cmd_vel(self, v: float, w: float):
+        self._client.publish(self.topic_cmd_vel, f"{v:.3f}&{w:.3f}")

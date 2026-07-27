@@ -12,11 +12,11 @@ from buey_robot.utils.params import load_params
 from buey_robot.utils.math import wrap180
 
 PARAMS = {
-    'offset_alpha': float,
-    'init_samples': ('offset_init_samples', int),
-    'straight_max_yaw_rate': float,
-    'converge_tol_deg': float,
-    'converge_min_samples': int,
+    'offset_alpha': ('offset.alpha', float),
+    'init_samples': ('offset.init_samples', int),
+    'straight_max_yaw_rate': ('straight_max_yaw_rate', float),
+    'converge_tol_deg': ('converge.tol_deg', float),
+    'converge_min_samples': ('converge.min_samples', int),
 }
 
 
@@ -24,6 +24,8 @@ class FusionHeading(Node):
     def __init__(self):
         super().__init__('fusion_heading')
         load_params(self, PARAMS)
+
+        # Estado
         self._imu_yaw = None         # deg, ultimo /imu/yaw
         self._yaw_rate = 0.0         # rad/s, ultimo /imu/rate (gate de recta)
         self._offset = None          # deg, imu -> ENU absoluto; None hasta el warm-up
@@ -32,10 +34,15 @@ class FusionHeading(Node):
         self._init_n = 0
         self._converge_count = 0
         self._converged = False
+
+        # Salida
         self._fused_pub = self.create_publisher(Float32, HEADING_FUSED, 10)
+
+        # Entradas
         self.create_subscription(Float32, IMU_YAW, self._on_yaw, 10)
         self.create_subscription(Float32, IMU_RATE, self._on_rate, 10)
         self.create_subscription(Float32, GPS_COURSE, self._on_course, 10)
+
         self.get_logger().info(
             f'fusion_heading iniciado: gyro+COG -> /heading/fused solo al converger '
             f'(alpha={self.offset_alpha}, tol={self.converge_tol_deg}deg x{self.converge_min_samples})')

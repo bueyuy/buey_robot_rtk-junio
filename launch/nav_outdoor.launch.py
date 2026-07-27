@@ -1,30 +1,15 @@
 #!/usr/bin/env python3
-"""Launch UNICO de navegacion outdoor (GPS RTK). Levanta TODO el stack:
+"""Navegacion outdoor (GPS RTK): sensores, fusion, odometria, MQTT y navegacion. La ruta
+de waypoints llega en vivo por MQTT (lat/lon); el datum lo fija odometry_gps con el primer
+fix confiable. El motor_gateway (joystick + motores) se levanta aparte, en su terminal:
 
-  - motor_gateway (joystick_controller + motor_gateway)   [drive manual + salida a motores]
-  - micro_ros_agent                                        [agente serial de la IMU]
-  - drivers/gps_nmea.py       (serial NMEA -> /gps/fix + /gps/course)   [SENSORES]
-  - drivers/imu_mpu6050.py    (/mpu6050/imu/data -> /imu/yaw + /imu/rate)
-  - fusion/heading.py         (/imu/yaw + /gps/course -> /heading/fused)
-  - odometry/gps.py           (GPS + heading -> /odom; ruta geo -> /local/route)
-  - adapters/mqtt/telemetry_bridge.py + command_bridge.py  [TRANSPORTE MQTT]
-  - navigation/controller.py + initializer.py              [NAV]
-
-Navegacion FULL RTK con geolocalizacion DINAMICA: la ruta de waypoints llega en vivo
-por MQTT (bueyuy/waypoints, lat/lon) desde la telemetria. NO hay waypoints fijos ni
-carga por archivo. El origen del frame lo fija rtk con el primer fix (auto).
-
-Orden: motores + sensores primero; odometria/telemetria a +2s; el controller a +6s
-(igual espera internamente odom + origen + calibracion del gyro + waypoints).
-
-Uso:
-  ros2 launch buey_robot nav_outdoor.launch.py
+  Terminal 1:  ros2 launch buey_robot motor_gateway.launch.py
+  Terminal 2:  ros2 launch buey_robot nav_outdoor.launch.py
 """
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import (
-    TimerAction, ExecuteProcess, IncludeLaunchDescription)
+from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 import os
@@ -32,86 +17,40 @@ import os
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('buey_robot')
-
-    nav_yaml = os.path.join(pkg_share, 'config', 'navigation.yaml')
+    launch_dir = os.path.join(pkg_share, 'launch')
     robot_yaml = os.path.join(pkg_share, 'config', 'robot.yaml')
-    gps_yaml = os.path.join(pkg_share, 'config', 'drivers', 'gps_nmea.yaml')
-    imu_yaml = os.path.join(pkg_share, 'config', 'drivers', 'imu_mpu6050.yaml')
     fusion_yaml = os.path.join(pkg_share, 'config', 'fusion', 'heading.yaml')
     gps_odom_yaml = os.path.join(pkg_share, 'config', 'odometry', 'gps.yaml')
-    motor_yaml = os.path.join(pkg_share, 'config', 'motor.yaml')
+    controller_yaml = os.path.join(pkg_share, 'config', 'navigation', 'controller.yaml')
+    initializer_yaml = os.path.join(pkg_share, 'config', 'navigation', 'initializer.yaml')
 
-    # --- motor_gateway (joystick + salida a motores) ---
-    motor_gateway = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_share, 'launch', 'motor_gateway.launch.py')))
-
-    # --- Agente microROS de la IMU (serial) ---
-    micro_ros_agent = ExecuteProcess(
-        cmd=['ros2', 'run', 'micro_ros_agent', 'micro_ros_agent',
-             'serial', '--dev', '/dev/ttyUSB0', '-b', '115200', '-v6'],
-        output='log',
-    )
-
-    # --- DRIVERS (especificos del modelo) ---
-    gps_node = Node(
-        package='buey_robot', executable='gps_nmea', name='gps_nmea',
-        output='screen', parameters=[gps_yaml],
-    )
-    imu_node = Node(
-        package='buey_robot', executable='imu_mpu6050', name='imu_mpu6050',
-        output='screen', parameters=[imu_yaml],
-    )
-
-    # --- FUSION (agnostica): /imu/yaw + /gps/course -> /heading/fused ---
-    fusion_node = Node(
+    fusion = Node(
         package='buey_robot', executable='fusion_heading', name='fusion_heading',
         output='screen', parameters=[fusion_yaml],
     )
-
-    # --- ODOMETRIA + TELEMETRIA (delay para que los sensores arranquen) ---
-    odometry_gps_node = Node(  # robot.yaml aporta el lever-arm de la antena
+    odometry = Node(  # robot.yaml aporta el lever-arm de la antena
         package='buey_robot', executable='odometry_gps', name='odometry_gps',
         output='screen', parameters=[gps_odom_yaml, robot_yaml],
     )
-    telemetry_bridge_node = Node(
-        package='buey_robot', executable='telemetry_bridge', name='telemetry_bridge',
-        output='screen',
+    controller = Node(
+        package='buey_robot', executable='navigation_controller', name='navigation_controller',
+        output='screen', parameters=[controller_yaml],
     )
-    odom_telemetry = TimerAction(
-        period=2.0, actions=[odometry_gps_node, telemetry_bridge_node])
-
-    # --- LOG BRIDGE (/rosout -> MQTT); arranca primero para captar los logs de arranque ---
-    log_bridge_node = Node(
-        package='buey_robot', executable='log_bridge', name='log_bridge',
-        output='screen',
+    initializer = Node(
+        package='buey_robot', executable='navigation_initializer', name='navigation_initializer',
+        output='screen', parameters=[initializer_yaml],
     )
 
-    # --- NAV_CONTROLLER + bridge de comandos (delay para que /odom ya publique) ---
-    controller_node = Node(
-        package='buey_robot', executable='navigation_controller',
-        name='navigation_controller', output='screen',
-        parameters=[nav_yaml, motor_yaml],
-    )
-    initializer_node = Node(
-        package='buey_robot', executable='navigation_initializer',
-        name='navigation_initializer', output='screen',
-        parameters=[nav_yaml],
-    )
-    command_bridge_node = Node(
-        package='buey_robot', executable='command_bridge', name='command_bridge',
-        output='screen',
-    )
-    controller = TimerAction(
-        period=6.0, actions=[controller_node, initializer_node, command_bridge_node])
+    sensors = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(launch_dir, 'sensors.launch.py')))
+    mqtt = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(launch_dir, 'mqtt.launch.py')))
 
     return LaunchDescription([
-        log_bridge_node,
-        motor_gateway,
-        micro_ros_agent,
-        gps_node,
-        imu_node,
-        fusion_node,
-        odom_telemetry,
+        sensors,
+        mqtt,
+        fusion,
+        odometry,
         controller,
+        initializer,
     ])

@@ -4,7 +4,7 @@ Sistema de navegacion autonoma para skid-steer agricola (Buey V), ROS2 Humble.
 
 Antes de tocar codigo, leer:
 - [README.md](README.md) — que es, build, uso.
-- [docs/architecture.md](docs/architecture.md) — capas, nodos, topics, diagramas.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — capas, nodos, topics, diagramas.
 - [docs/CONVENTIONS.md](docs/CONVENTIONS.md) — reglas de diseño. **Respetarlas.**
 
 Reglas rapidas (detalle en CONVENTIONS.md):

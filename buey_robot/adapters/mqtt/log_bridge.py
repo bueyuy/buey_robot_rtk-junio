@@ -17,11 +17,13 @@ _MIN_LEVEL = 20   # INFO en adelante
 class LogBridge(Node):
     def __init__(self):
         super().__init__('log_bridge')
+        # Salida: broker MQTT
         mqtt_cfg = load_config('mqtt.yaml')
         self._mqtt = get_client(mqtt_cfg, logger=self.get_logger())
         self._qos = require_key(mqtt_cfg, 'qos', 'telemetry')
         self._topic = require_key(mqtt_cfg, 'topics', 'logs')
 
+        # Entrada: /rosout
         # QoS de /rosout (transient_local, depth 1000) para capturar tambien los logs de arranque.
         rosout_qos = QoSProfile(depth=1000, history=HistoryPolicy.KEEP_LAST,
                                 durability=DurabilityPolicy.TRANSIENT_LOCAL,

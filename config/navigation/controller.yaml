@@ -1,0 +1,17 @@
+# Controlador de navegacion (stop_and_turn) -> /nav/cmd_vel.
+navigation_controller:
+  ros__parameters:
+    frequency_hz: 10.0               # Hz del lazo de control
+    odom_timeout_s: 0.5              # s: antiguedad max del ultimo /odom para navegar (staleness)
+    goal:
+      position_tolerance_m: 0.5      # m: distancia al WP para darlo por alcanzado
+      alignment_tolerance_deg: 10.0  # grados: error de rumbo max antes de dejar de girar y avanzar
+    velocity:
+      cruise_linear_m_s: 0.3         # m/s: crucero lineal
+      min_linear_m_s: 0.20           # m/s: minima (no arrastrarse -> mantiene COG util)
+      cruise_angular_rad_s: 0.4      # rad/s: giro al alinear
+      max_angular_rad_s: 0.6         # rad/s: tope angular
+    angular:
+      proportional_gain: 0.5         # ganancia P de correccion de rumbo en recta
+    deceleration:
+      distance_m: 2.0                # m: distancia al WP donde empieza a desacelerar

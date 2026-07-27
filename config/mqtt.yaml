@@ -9,19 +9,14 @@ broker:
 qos:
   telemetry: 0
 
+telemetry_hz: 2.0            # tasa de la telemetria a MQTT (TelemetryBridge + cmd_vel del gateway)
+
 reconnect:
   interval_sec: 5.0
 
+# Topics que NO espejan un topic ROS (los demas van a bueyuy/<topic-ros> automatico).
 topics:
-  # Salida a motores (MotorGateway)
-  motors: "bueyuy/navigation/motors"
-  cmd_vel_debug: "bueyuy/navigation/cmd_vel"
-
-  # Comandos entrantes (CommandBridge / joystick)
-  joystick: "bueyuy/navigation/joystick"    # teleop "w&v"
-  nav_start: "bueyuy/navigation/start"      # GO (no retained)
-  waypoints: "bueyuy/waypoints"             # ruta lat/lon (retained)
-
-  # Telemetria consolidada (TelemetryBridge) + logs (LogBridge)
-  telemetry_json: "bueyuy/telemetry/json"
-  logs: "bueyuy/logs"
+  motors: "bueyuy/navigation/motors"        # MotorGateway -> Pico (control, no telemetria)
+  cmd_vel_debug: "bueyuy/navigation/cmd_vel" # v&w aplicado (debug)
+  joystick: "bueyuy/navigation/joystick"    # teleop "w&v" (in)
+  logs: "bueyuy/logs"                       # LogBridge

@@ -3,7 +3,7 @@
 ROS2 Humble. Skid-steer agricola con navegacion FULL RTK: sigue una ruta de waypoints
 (lat/lon, en vivo por MQTT) usando GPS RTK + IMU, en modo stop_and_turn.
 
-- **Arquitectura** (capas, nodos, topics, diagramas): [docs/architecture.md](docs/architecture.md)
+- **Arquitectura** (capas, nodos, topics, diagramas): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - **Convenciones** (reglas de diseño para devs/agentes): [docs/CONVENTIONS.md](docs/CONVENTIONS.md)
 
 ## Flujo en una linea
@@ -27,17 +27,19 @@ source install/setup.bash
 
 ## Uso
 
-```bash
-# Stack completo (sensores + odometria + navegacion + motores + bridges MQTT)
-ros2 launch buey_robot nav_outdoor.launch.py
+Dos terminales: el gateway (joystick + motores) por un lado, el resto del stack por otro.
 
-# Solo drive manual (joystick + gateway)
+```bash
+# Terminal 1: drive manual (joystick + gateway a motores)
 ros2 launch buey_robot motor_gateway.launch.py
+
+# Terminal 2: sensores + fusion + odometria + navegacion + bridges MQTT
+ros2 launch buey_robot nav_outdoor.launch.py
 ```
 
-Desde la web: cargar la ruta (`bueyuy/waypoints`, lat/lon) y dar el GO
-(`bueyuy/navigation/start`). El robot recalibra el gyro, se alinea avanzando recto y navega.
-El joystick (`bueyuy/navigation/joystick`) tiene prioridad sobre la navegacion.
+Desde la web: cargar la ruta (`bueyuy/geo/route`, lat/lon) y dar el GO (`bueyuy/nav/start`).
+El robot recalibra el gyro, se alinea avanzando recto y navega. El joystick
+(`bueyuy/navigation/joystick`) tiene prioridad sobre la navegacion.
 
 ## Config
 

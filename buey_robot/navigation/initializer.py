@@ -1,6 +1,6 @@
 """Initializer: maniobra de arranque open-loop. En cada GO recalibra el gyro (robot
-quieto) y avanza recto para generar COG hasta que el heading converge; ahi se retira
-(deja de publicar /init/cmd_vel y el mux cede a la navegacion)."""
+quieto) y avanza recto para generar COG hasta que el heading converge; ahi deja de
+publicar /init/cmd_vel."""
 
 import math
 
@@ -14,11 +14,11 @@ from buey_robot.utils.params import load_params
 from buey_robot.contracts import NAV_START, ODOM, IMU_YAW, HEADING_FUSED, INIT_CMD_VEL, IMU_CALIBRATE
 
 PARAMS = {
-    'rate': ('initializer.rate_hz', float),
-    'straight_speed': ('initializer.straight_speed_m_s', float),
-    'min_distance': ('initializer.min_distance_m', float),
-    'max_distance': ('initializer.max_distance_m', float),
-    'calib_settle': ('initializer.calib_settle_s', float),
+    'rate': ('rate_hz', float),
+    'straight_speed': ('straight_speed_m_s', float),
+    'min_distance': ('min_distance_m', float),
+    'max_distance': ('max_distance_m', float),
+    'calib_settle': ('calib_settle_s', float),
 }
 
 _IDLE = 'idle'
@@ -30,18 +30,25 @@ class NavigationInitializer(Node):
     def __init__(self):
         super().__init__('navigation_initializer')
         load_params(self, PARAMS)
+
+        # Estado
         self._state = _IDLE
         self._x = self._y = None
         self._start_xy = None
         self._converged = False
         self._gyro_ready = False
         self._calib_sent_at = 0.0
+
+        # Salidas
         self._cmd_pub = self.create_publisher(Twist, INIT_CMD_VEL, 10)
         self._calib_pub = self.create_publisher(Empty, IMU_CALIBRATE, 10)
+
+        # Entradas
         self.create_subscription(Empty, NAV_START, self._on_start, 10)
         self.create_subscription(Odometry, ODOM, self._on_odom, 10)
         self.create_subscription(Float32, IMU_YAW, self._on_yaw, 10)
         self.create_subscription(Float32, HEADING_FUSED, self._on_fused, 10)
+
         self.create_timer(1.0 / self.rate, self._tick)
         self.get_logger().info(
             f'navigation_initializer iniciado (recalib gyro + recto {self.straight_speed}m/s '
@@ -85,7 +92,7 @@ class NavigationInitializer(Node):
             return
         traveled = self._traveled()
         if self._converged and traveled >= self.min_distance:
-            self._state = _IDLE                    # listo: dejar de publicar -> el mux cede a nav
+            self._state = _IDLE                    # listo: dejar de publicar /init/cmd_vel
             self.get_logger().info(f'heading listo ({traveled:.1f}m) -> cediendo a la navegacion')
             return
         if traveled >= self.max_distance:

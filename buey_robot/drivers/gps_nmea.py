@@ -12,16 +12,17 @@ from buey_robot.adapters.serial.serial_lines import SerialLineReader
 from buey_robot.drivers.nmea_parser import NmeaParser
 from buey_robot.contracts import GPS_FIX, GPS_COURSE, GPS_STATUS
 from buey_robot.utils.params import load_params
+from buey_robot.utils.log import TransitionLogger
 
 _KNOTS_TO_MS = 0.514444
 
 PARAMS = {
-    'port': ('gps.serial.port', str),
-    'baud': ('gps.serial.baudrate', int),
-    'timeout': ('gps.serial.timeout', float),
-    'frame_id': ('gps.frame_id', str),
-    'course_min_speed': ('gps.course.min_speed', float),
-    'course_require_rtk': ('gps.course.require_rtk', bool),
+    'port': ('serial.port', str),
+    'baud': ('serial.baudrate', int),
+    'timeout': ('serial.timeout', float),
+    'frame_id': ('frame_id', str),
+    'course_min_speed': ('course.min_speed', float),
+    'course_require_rtk': ('course.require_rtk', bool),
 }
 
 QUALITY_NAMES = {0: 'No Fix', 1: 'GPS', 2: 'DGPS', 4: 'RTK Fixed', 5: 'RTK Float'}
@@ -32,12 +33,14 @@ class GpsNmea(Node):
         super().__init__('gps_nmea')
 
         load_params(self, PARAMS)
-        self._last_quality = None       # para loguear cambios de calidad
+        self._quality_log = TransitionLogger(self.get_logger())   # cambios de calidad RTK
 
+        # Salidas
         self._gps_pub = self.create_publisher(GPSFix, GPS_FIX, 10)
         self._course_pub = self.create_publisher(Float32, GPS_COURSE, 10)
         self._status_pub = self.create_publisher(String, GPS_STATUS, 10)
 
+        # Fuente: serial NMEA
         self._parser = NmeaParser()
         self._serial_reader = SerialLineReader(
             port=self.port, baud=self.baud, on_line=self._on_line, timeout=self.timeout,
@@ -73,13 +76,9 @@ class GpsNmea(Node):
         return GPSStatus.STATUS_NO_FIX
 
     def _log_quality(self, data: dict):
-        if data['quality'] == self._last_quality:
-            return
-        prev = self._last_quality
-        old = QUALITY_NAMES.get(prev, f'Q{prev}') if prev is not None else 'inicial'
-        new = QUALITY_NAMES.get(data['quality'], f'Q{data["quality"]}')
-        self.get_logger().info(f'GPS calidad: {old} -> {new} (sats={data["satellites"]})')
-        self._last_quality = data['quality']
+        q = data['quality']
+        name = QUALITY_NAMES.get(q, f'Q{q}')
+        self._quality_log.info(f'GPS calidad: {name} (sats={data["satellites"]})', key=q)
 
     def _publish_course(self, data: dict):
         """Publica /gps/course (COG -> yaw ENU) SOLO cuando es confiable: en movimiento
@@ -94,8 +93,8 @@ class GpsNmea(Node):
         self._course_pub.publish(Float32(data=float((90.0 - cog) % 360.0)))
 
     def _on_fix(self, data: dict):
-        """Publica el fix con su calidad (accuracy segun quality/hdop). La validez -si es
-        suficientemente bueno- la decide el consumidor. Solo se omite si no hay coordenadas."""
+        """Publica el fix con su calidad (accuracy segun quality/hdop); no filtra por calidad.
+        Solo se omite si no hay coordenadas."""
         self._log_quality(data)
         self._publish_course(data)
 
@@ -126,9 +125,10 @@ class GpsNmea(Node):
         self._gps_pub.publish(msg)
 
         self._status_pub.publish(String(data=json.dumps({
-            'quality': quality, 'sats': data['satellites'],
-            'hdop': round(data['hdop'], 2), 'accuracy': round(accuracy, 3),
-            'course': round(msg.track, 1), 'speed': round(msg.speed, 2),
+            'quality': quality, 'quality_str': QUALITY_NAMES.get(quality, f'Q{quality}'),
+            'sats': data['satellites'], 'hdop': round(data['hdop'], 2),
+            'accuracy': round(accuracy, 3), 'course': round(msg.track, 1),
+            'speed': round(msg.speed, 2),
         })))
 
     def destroy_node(self):

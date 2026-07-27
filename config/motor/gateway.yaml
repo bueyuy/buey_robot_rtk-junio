@@ -1,0 +1,28 @@
+# Motor gateway: mux por prioridad + rampa por fuente + cinematica -> motores.
+motor_gateway:
+  ros__parameters:
+    wheel_separation: 0.52           # m, separacion entre ruedas
+    max_output: 70.0                 # porcentaje maximo (-100 a 100)
+    linear_gain: 1.2
+    angular_gain: 2.8
+    velocity:
+      rate_hz: 20.0                  # Hz del lazo de salida a motores
+      source_timeout_ms: 600.0       # ms sin msg de una fuente -> inactiva
+      brake:                         # rampa al frenar (sin fuente activa)
+        linear: 0.05
+        angular: 0.08
+      nav:                           # perfil navegacion (suave)
+        accel_linear: 0.015
+        decel_linear: 0.03
+        accel_angular: 0.03
+        decel_angular: 0.03
+      joy:                           # perfil joystick (snappy)
+        accel_linear: 0.03
+        decel_linear: 0.03
+        accel_angular: 0.03
+        decel_angular: 0.03
+      init:                          # perfil maniobra de arranque
+        accel_linear: 0.015
+        decel_linear: 0.03
+        accel_angular: 0.03
+        decel_angular: 0.03

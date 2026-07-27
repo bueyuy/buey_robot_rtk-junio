@@ -1,10 +1,5 @@
-"""Parser NMEA (GGA + VTG) -> dict de fix. Acumula estado entre sentencias;
-feed(sentence) emite el fix al llegar una VTG con calidad (el receptor no manda
-RMC; COG/SOG vienen por VTG), si no None.
-
-fix: lat, lon (grados decimales o None), alt (m), quality (0/1/2/4/5),
-satellites, hdop, speed_knots (o None), cog (o None).
-"""
+"""Parser NMEA (GGA + VTG) -> dict de fix. feed(sentence) emite el fix al llegar una VTG
+con calidad (el receptor manda COG/SOG por VTG, no RMC); si no, None."""
 
 from typing import Optional
 

@@ -1,7 +1,7 @@
 # Convenciones — buey_robot
 
 Directrices para cualquier dev (humano o agente) que toque este repo. El mapa de
-capas/nodos/topics vive en [architecture.md](architecture.md); aca van las REGLAS, no el mapa.
+capas/nodos/topics vive en [ARCHITECTURE.md](ARCHITECTURE.md); aca van las REGLAS, no el mapa.
 
 ## 1. Arquitectura por capas
 
@@ -65,16 +65,22 @@ capas/nodos/topics vive en [architecture.md](architecture.md); aca van las REGLA
 - **Comentarios minimos (KISS).** Header de 1 linea por archivo (que es / que hace) SIEMPRE.
   En codigo: comentar solo lo NO inferible (unidades, magic number con su razon, condicion no
   obvia). Nada de header meta de 2da linea ni comentarios que repiten el nombre del atributo.
-- **Self-contained.** El comentario describe lo que hace ESE archivo, sin nombrar otros nodos ni
-  actores externos (dashboard, operador). Si moves el archivo a otro proyecto, el comentario
-  sigue siendo verdad. Los topics propios de I/O si van (son su interfaz).
+- **Self-contained.** El comentario describe SOLO lo que hace ESE archivo. NO nombrar otros
+  nodos/actores (dashboard, operador) NI describir que hace otro nodo con tu salida. Ej PROHIBIDO:
+  "publica crudo (el gateway lo suaviza)", "deja de publicar -> el mux cede a la nav", "la valida
+  el consumidor". Ej OK: "publica /joy/cmd_vel crudo. Sin input deja de publicar". Si moves el
+  archivo a otro proyecto el comentario sigue siendo verdad. Los topics propios de I/O si van.
 - **Configs YAML**: un comentario corto por linea, con el `#` alineado en columna.
 - **Logs = excepcion a "minimo".** Van EXPLICITOS y auto-descriptivos: sin jerga ambigua,
   con NUMEROS (valor medido + umbral) y la CONSECUENCIA. Ej malo: "fix no confiable". Ej bueno:
   "GPS poco preciso: accuracy 0.05m > 0.035m (RTK Fixed). No publico odometria."
-- **Observabilidad = logs**, NO topics `/status` de navegacion (un adapter futuro reenvia
-  `/rosout` a MQTT). En loops que corren a N Hz: loguear el estado SOLO en transicion (guardar
-  el ultimo y comparar) o con `throttle_duration_sec`; nunca una linea por tick.
+- **Observabilidad = logs**, NO topics `/status` de navegacion (`LogBridge` reenvia `/rosout`
+  a MQTT). Tres patrones segun el caso, no reinventar:
+  - **Evento** (pasa una vez): `get_logger().info(...)` directo (arranque, ruta cargada, GO, WP).
+  - **Transicion** (estado que persiste y cambia poco): `TransitionLogger` (`utils/log.py`) — loguea
+    solo al cambiar. Con `key=` cuando el texto varia dentro del mismo estado (ej un valor medido).
+  - **Progreso** (cambia cada tick pero querer verlo cada tanto): `throttle_duration_sec`.
+  Nunca una linea por tick.
 
 ## 7. Estilo de codigo
 

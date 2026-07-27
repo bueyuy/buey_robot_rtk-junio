@@ -11,15 +11,16 @@ from buey_robot.adapters.mqtt.client import get_client
 from buey_robot.adapters.mqtt.motor_output import MqttMotorOutput
 from buey_robot.motor.filters import SlewRateLimiter
 from buey_robot.motor.kinematics import differential_to_motor
-from buey_robot.utils.config import load_config
+from buey_robot.utils.config import load_config, require_key
 from buey_robot.utils.params import load_params
+from buey_robot.utils.log import TransitionLogger
 from buey_robot.contracts import NAV_CMD_VEL, JOY_CMD_VEL, INIT_CMD_VEL
 
 PARAMS = {
-    'L': ('motor_control.wheel_separation', float),
-    'max_output': ('motor_control.max_output', float),
-    'linear_gain': ('motor_control.linear_gain', float),
-    'angular_gain': ('motor_control.angular_gain', float),
+    'L': ('wheel_separation', float),
+    'max_output': ('max_output', float),
+    'linear_gain': ('linear_gain', float),
+    'angular_gain': ('angular_gain', float),
     'rate': ('velocity.rate_hz', float),
     'source_timeout_ms': ('velocity.source_timeout_ms', float),
     'brake_lin': ('velocity.brake.linear', float),
@@ -46,10 +47,12 @@ class MotorGateway(Node):
         super().__init__('motor_gateway')
         load_params(self, PARAMS)
 
+        # Salida a motores (MQTT)
         mqtt_cfg = load_config('mqtt.yaml')
         self._mqtt = get_client(mqtt_cfg, logger=self.get_logger())
         self._output = MqttMotorOutput(self._mqtt, mqtt_cfg)
 
+        # Estado
         self._vramp = SlewRateLimiter(0.0, 0.0)
         self._wramp = SlewRateLimiter(0.0, 0.0)
         self._profiles = {
@@ -60,11 +63,15 @@ class MotorGateway(Node):
         self._target = {n: (0.0, 0.0) for n in self.PRIORITY}
         self._stamp = {n: 0.0 for n in self.PRIORITY}
         self._timeout = self.source_timeout_ms / 1000.0
-        self._last_source = ''       # para loguear el cambio de fuente activa del mux
+        self._cmd_period = 1.0 / require_key(mqtt_cfg, 'telemetry_hz')   # cmd_vel es telemetria
+        self._last_cmd_pub = 0.0
+        self._mux_log = TransitionLogger(self.get_logger())   # cambio de fuente activa del mux
 
+        # Entradas (fuentes de cmd_vel)
         self.create_subscription(Twist, NAV_CMD_VEL, lambda m: self._on_cmd('nav', m), 10)
         self.create_subscription(Twist, JOY_CMD_VEL, lambda m: self._on_cmd('joy', m), 10)
         self.create_subscription(Twist, INIT_CMD_VEL, lambda m: self._on_cmd('init', m), 10)
+
         self.create_timer(1.0 / self.rate, self._tick)
         self.get_logger().info(
             f'motor_gateway iniciado (mux joy>init>nav, L={self.L}, max_output={self.max_output})')
@@ -85,9 +92,7 @@ class MotorGateway(Node):
 
     def _tick(self):
         name = self._active()
-        if name != self._last_source:
-            self._last_source = name
-            self.get_logger().info(f'mux: {name} toma control' if name else 'mux: sin fuente -> frenando')
+        self._mux_log.info(f'mux: {name} toma control' if name else 'mux: sin fuente -> frenando', key=name)
         if name is None:
             tv, tw = 0.0, 0.0
             self._vramp.set_rates(self.brake_lin, self.brake_lin)
@@ -102,7 +107,11 @@ class MotorGateway(Node):
         velL, velR = differential_to_motor(v * self.linear_gain, w * self.angular_gain, self.L)
         velL = max(-self.max_output, min(self.max_output, velL))
         velR = max(-self.max_output, min(self.max_output, velR))
-        self._output.send(velL, velR, v, w)
+        self._output.send_motors(velL, velR)                  # rate de control (Pico)
+        now = self._now()
+        if now - self._last_cmd_pub >= self._cmd_period:      # cmd_vel: telemetria, throttleado
+            self._last_cmd_pub = now
+            self._output.send_cmd_vel(v, w)
 
 
 def main(args=None):

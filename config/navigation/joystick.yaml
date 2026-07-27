@@ -1,0 +1,8 @@
+# Teleop joystick -> /joy/cmd_vel.
+joystick_controller:
+  ros__parameters:
+    cruise_linear_m_s: 0.3           # m/s: crucero lineal
+    cruise_angular_rad_s: 0.5        # rad/s: giro
+    max_angular_rad_s: 0.6           # rad/s: tope angular
+    frequency_hz: 10.0               # Hz del lazo
+    timeout_ms: 600.0                # ms sin comando -> deja de publicar

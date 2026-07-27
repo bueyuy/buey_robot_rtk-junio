@@ -1,10 +1,12 @@
-# IMU MPU6050: bias del gyro + integracion de yaw a heading relativo.
+# IMU MPU6050: bias del gyro + integracion de yaw a heading relativo -> /imu/yaw.
 imu_mpu6050:
   ros__parameters:
-    imu_topic: "/mpu6050/imu/data"        # topic crudo del firmware (accel+gyro)
-    gyro_bias_z: 0.0                      # rad/s, bias de yaw; se re-estima en reposo
-    auto_bias_samples: 200                # muestras del auto-bias (~10s a 20Hz)
-    stationary_thresh: 0.05               # rad/s, umbral de "quieto" para calibrar
-    gyro_alive_min_std: 0.0001            # rad/s, por debajo = gyro muerto
-    heading_initial_deg: 0.0              # heading de arranque
-    heading_invert: false                 # invertir el sentido del yaw
+    imu_topic: "/mpu6050/imu/data"   # topic crudo del firmware (accel+gyro)
+    gyro:
+      bias_z: 0.0                    # rad/s, bias de yaw; se re-estima en reposo
+      auto_bias_samples: 200         # muestras del auto-bias (~10s a 20Hz)
+      stationary_thresh: 0.05        # rad/s, umbral de "quieto" para calibrar
+      alive_min_std: 0.0001          # rad/s, por debajo = gyro muerto
+    heading:
+      initial_deg: 0.0               # heading de arranque
+      invert: false                  # invertir el sentido del yaw

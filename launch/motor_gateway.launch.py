@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
-"""Launch para motor_gateway con joystick. Drive manual sin odometria.
+"""Drive manual: joystick MQTT + gateway a motores, sin odometria.
 
-Nodos:
-  - navigation/joystick.py  (MQTT joystick -> /cmd_vel_joy)
-  - motor/gateway.py        (cmd_vel_joy -> motores)
-
-Uso:
   ros2 launch buey_robot motor_gateway.launch.py
 """
 
@@ -17,15 +12,15 @@ import os
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('buey_robot')
-    nav_yaml = os.path.join(pkg_share, 'config', 'navigation.yaml')
-    motor_yaml = os.path.join(pkg_share, 'config', 'motor.yaml')
+    joystick_yaml = os.path.join(pkg_share, 'config', 'navigation', 'joystick.yaml')
+    gateway_yaml = os.path.join(pkg_share, 'config', 'motor', 'gateway.yaml')
 
     joystick_node = Node(
         package='buey_robot',
         executable='joystick_controller',
         name='joystick_controller',
         output='screen',
-        parameters=[nav_yaml],
+        parameters=[joystick_yaml],
     )
 
     motor_gateway_node = Node(
@@ -33,7 +28,7 @@ def generate_launch_description():
         executable='motor_gateway',
         name='motor_gateway',
         output='screen',
-        parameters=[motor_yaml],
+        parameters=[gateway_yaml],
     )
 
     return LaunchDescription([

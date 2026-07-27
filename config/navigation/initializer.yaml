@@ -1,0 +1,8 @@
+# Maniobra de arranque: recalib gyro + avance recto para generar COG -> /init/cmd_vel.
+navigation_initializer:
+  ros__parameters:
+    rate_hz: 10.0                    # Hz del lazo de la maniobra
+    straight_speed_m_s: 0.2          # m/s avanzando recto para generar COG
+    min_distance_m: 1.0              # m minimos antes de poder soltar la nav
+    max_distance_m: 3.0              # m: tope si el heading nunca converge
+    calib_settle_s: 2.0              # s de gracia tras el trigger de recalibracion del gyro

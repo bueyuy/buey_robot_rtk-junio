@@ -4,24 +4,15 @@ import math
 
 
 def quaternion_to_yaw(qx: float, qy: float, qz: float, qw: float) -> float:
-    """Extrae yaw (heading) de un quaternion.
-
-    Returns:
-        Yaw en radianes [-pi, pi].
-    """
-    siny_cosp = 2.0 * (qw * qz + qx * qy)
-    cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz)
-    return math.atan2(siny_cosp, cosy_cosp)
+    """Yaw (rad, [-pi, pi]) de un quaternion."""
+    return math.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
 
 
 def angle_diff(target: float, current: float) -> float:
-    """Calcula la diferencia angular mas corta (target - current), normalizada a [-pi, pi]."""
-    return math.atan2(
-        math.sin(target - current),
-        math.cos(target - current)
-    )
+    """Diferencia angular mas corta (target - current), normalizada a [-pi, pi]."""
+    return math.atan2(math.sin(target - current), math.cos(target - current))
 
 
 def wrap180(deg: float) -> float:
-    """Normaliza un angulo en grados a (-180, 180]."""
+    """Normaliza grados a (-180, 180]."""
     return (deg + 180.0) % 360.0 - 180.0

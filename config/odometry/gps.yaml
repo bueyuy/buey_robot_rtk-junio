@@ -1,9 +1,11 @@
-# Odometria GPS: /gps/fix -> /odom. El offset de antena vive en robot.yaml.
+# Odometria GPS: /gps/fix -> /odom.
 odometry_gps:
   ros__parameters:
-    gps.frame_id: "gps_link"              # child_frame_id del /odom
-    gps.allow_float: true                 # aceptar RTK Float (no exigir Fixed)
-    gps.rtk.fixed_max_accuracy_m: 0.035   # techo de accuracy para confiar en RTK Fixed (cm)
-    gps.rtk.float_max_accuracy_m: 0.10    # techo de accuracy para confiar en RTK Float (dm)
-    gps.filter.enabled: true              # media movil sobre la posicion
-    gps.filter.window_size: 5             # muestras de la media movil
+    frame_id: "gps_link"             # child_frame_id del /odom
+    allow_float: true                # aceptar RTK Float (no exigir Fixed)
+    rtk:
+      fixed_max_accuracy_m: 0.035    # techo de accuracy para confiar en RTK Fixed (cm)
+      float_max_accuracy_m: 0.10     # techo de accuracy para confiar en RTK Float (dm)
+    filter:
+      enabled: true                  # media movil sobre la posicion
+      window_size: 5                 # muestras de la media movil

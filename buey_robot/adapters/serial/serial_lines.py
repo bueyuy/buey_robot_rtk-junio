@@ -8,6 +8,8 @@ from typing import Callable, Optional
 
 import serial
 
+from buey_robot.utils.log import TransitionLogger
+
 
 class SerialLineReader:
     def __init__(
@@ -25,7 +27,7 @@ class SerialLineReader:
         self._timeout = timeout
         self._reconnect_interval = reconnect_interval
         self._logger = logger
-        self._last_error: Optional[str] = None
+        self._err_log = TransitionLogger(logger)   # dedup de errores repetidos
 
         self._serial: Optional[serial.Serial] = None
         self._stop_event = threading.Event()
@@ -52,18 +54,18 @@ class SerialLineReader:
             except serial.SerialException:
                 self._close()                              # perdio el puerto -> reconecta
             except Exception as e:
-                self._log_once(f'Serial: error leyendo/parseando: {e}')
+                self._err_log.error(f'Serial: error leyendo/parseando: {e}')
 
     def _try_connect(self):
         try:
             self._serial = serial.Serial(
                 port=self._port_name, baudrate=self._baud, timeout=self._timeout)
-            self._last_error = None
+            self._err_log.reset()
             if self._logger is not None:
                 self._logger.info(f'Serial conectado: {self._port_name} @ {self._baud}')
         except serial.SerialException as e:
             self._serial = None
-            self._log_once(f'Serial no conecta a {self._port_name}: {e}')
+            self._err_log.error(f'Serial no conecta a {self._port_name}: {e}')
 
     def _close(self):
         if self._serial:
@@ -72,8 +74,3 @@ class SerialLineReader:
             except Exception:
                 pass
             self._serial = None
-
-    def _log_once(self, msg: str):
-        if msg != self._last_error and self._logger is not None:   # dedup: no spamear el loop
-            self._logger.error(msg)
-            self._last_error = msg

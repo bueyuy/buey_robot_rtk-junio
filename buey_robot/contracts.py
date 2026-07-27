@@ -16,6 +16,7 @@ HEADING_FUSED = '/heading/fused'                # Float32, deg ENU, yaw absoluto
 
 # Odometria
 ODOM = '/odom'                                  # Odometry, pose x/y + twist en frame local
+GEO_POSITION = '/geo/position'                  # String JSON {lat, lon} del robot (para el mapa)
 
 # Rutas (String con JSON: {waypoints:[...], loop})
 GEO_ROUTE = '/geo/route'                        # String JSON {waypoints:[{lat,lon}], loop}
@@ -23,6 +24,7 @@ LOCAL_ROUTE = '/local/route'                    # String JSON {waypoints:[{x,y}]
 
 # Navegacion
 NAV_START = '/nav/start'                        # Empty, GO
+NAV_STATUS = '/nav/status'                      # String JSON, estado operativo (state, wp, distancia, pose, v/w)
 NAV_CMD_VEL = '/nav/cmd_vel'                    # Twist, velocidad objetivo de navegacion
 JOY_CMD_VEL = '/joy/cmd_vel'                    # Twist, velocidad de teleoperacion
 INIT_CMD_VEL = '/init/cmd_vel'                  # Twist, velocidad de la maniobra de arranque
