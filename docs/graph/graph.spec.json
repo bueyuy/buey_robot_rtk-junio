@@ -5,8 +5,7 @@
     "odometria",
     "navegacion",
     "actuacion",
-    "hardware",
-    "telemetria"
+    "hardware"
   ],
   "roles": {
     "sensor": {
@@ -40,8 +39,7 @@
       ],
       "out": [
         "/gps/fix",
-        "/gps/course",
-        "/gps/status"
+        "/gps/course"
       ],
       "file": "drivers/gps_nmea.py",
       "desc": "lee el GPS: lat/lon + calidad RTK; COG solo si es confiable"
@@ -56,8 +54,7 @@
       ],
       "out": [
         "/imu/yaw",
-        "/imu/rate",
-        "/imu/status"
+        "/imu/rate"
       ],
       "file": "drivers/imu_mpu6050.py",
       "desc": "bias del gyro e integra yaw relativo"
@@ -102,8 +99,7 @@
       ],
       "out": [
         "/local/route",
-        "/odom",
-        "/geo/position"
+        "/odom"
       ],
       "file": "odometry/gps.py",
       "desc": "frontera geo/metrica: fija el datum, fix a /odom, ruta geo a x/y"
@@ -118,8 +114,7 @@
         "/odom"
       ],
       "out": [
-        "/nav/cmd_vel",
-        "/nav/status"
+        "/nav/cmd_vel"
       ],
       "file": "navigation/controller.py",
       "desc": "sigue la ruta (stop_and_turn); frena si /odom no esta fresco"
@@ -179,36 +174,6 @@
       "out": [],
       "file": "hardware",
       "desc": "recibe las velocidades de rueda por MQTT"
-    },
-    {
-      "id": "TelemetryBridge",
-      "layer": 6,
-      "role": "comando",
-      "in": [
-        "/nav/status",
-        "/geo/position",
-        "/gps/status",
-        "/imu/status",
-        "/imu/yaw"
-      ],
-      "out": [
-        "MQTT"
-      ],
-      "file": "adapters/mqtt/telemetry_bridge.py",
-      "desc": "espeja el estado del stack a la web, throttleado a telemetry_hz"
-    },
-    {
-      "id": "LogBridge",
-      "layer": 6,
-      "role": "comando",
-      "in": [
-        "/rosout"
-      ],
-      "out": [
-        "MQTT"
-      ],
-      "file": "adapters/mqtt/log_bridge.py",
-      "desc": "reenvia los logs de ROS (>= INFO) al broker"
     }
   ],
   "edges": [
@@ -314,36 +279,6 @@
       "ImuMpu6050",
       "/imu/calibrate",
       "feedback"
-    ],
-    [
-      "GpsNmea",
-      "/gps/status",
-      "TelemetryBridge",
-      "/gps/status"
-    ],
-    [
-      "ImuMpu6050",
-      "/imu/status",
-      "TelemetryBridge",
-      "/imu/status"
-    ],
-    [
-      "ImuMpu6050",
-      "/imu/yaw",
-      "TelemetryBridge",
-      "/imu/yaw"
-    ],
-    [
-      "OdometryGps",
-      "/geo/position",
-      "TelemetryBridge",
-      "/geo/position"
-    ],
-    [
-      "NavigationController",
-      "/nav/status",
-      "TelemetryBridge",
-      "/nav/status"
     ]
   ]
 }
