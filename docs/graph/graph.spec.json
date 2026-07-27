@@ -1,0 +1,349 @@
+{
+  "layers": [
+    "entradas",
+    "estimacion",
+    "odometria",
+    "navegacion",
+    "actuacion",
+    "hardware",
+    "telemetria"
+  ],
+  "roles": {
+    "sensor": {
+      "color": "#5AC8A8",
+      "desc": "medicion cruda del hardware"
+    },
+    "comando": {
+      "color": "#D9A85C",
+      "desc": "intencion que entra desde afuera"
+    },
+    "estado": {
+      "color": "#9B93E8",
+      "desc": "estado estimado del robot"
+    },
+    "control": {
+      "color": "#E08A6B",
+      "desc": "consigna de movimiento"
+    },
+    "hw": {
+      "color": "#8A8A94",
+      "desc": "senal electrica"
+    }
+  },
+  "nodes": [
+    {
+      "id": "GpsNmea",
+      "layer": 0,
+      "role": "sensor",
+      "in": [
+        "serial NMEA"
+      ],
+      "out": [
+        "/gps/fix",
+        "/gps/course",
+        "/gps/status"
+      ],
+      "file": "drivers/gps_nmea.py",
+      "desc": "lee el GPS: lat/lon + calidad RTK; COG solo si es confiable"
+    },
+    {
+      "id": "ImuMpu6050",
+      "layer": 0,
+      "role": "sensor",
+      "in": [
+        "serial IMU",
+        "/imu/calibrate"
+      ],
+      "out": [
+        "/imu/yaw",
+        "/imu/rate",
+        "/imu/status"
+      ],
+      "file": "drivers/imu_mpu6050.py",
+      "desc": "bias del gyro e integra yaw relativo"
+    },
+    {
+      "id": "CommandBridge",
+      "layer": 0,
+      "role": "comando",
+      "in": [
+        "MQTT"
+      ],
+      "out": [
+        "/nav/start",
+        "/geo/route"
+      ],
+      "file": "adapters/mqtt/command_bridge.py",
+      "desc": "trae la ruta (lat/lon) y el GO desde afuera; transporte puro"
+    },
+    {
+      "id": "FusionHeading",
+      "layer": 1,
+      "role": "estado",
+      "in": [
+        "/gps/course",
+        "/imu/yaw",
+        "/imu/rate"
+      ],
+      "out": [
+        "/heading/fused"
+      ],
+      "file": "fusion/heading.py",
+      "desc": "fusiona gyro + COG a yaw absoluto ENU; publica solo al converger"
+    },
+    {
+      "id": "OdometryGps",
+      "layer": 2,
+      "role": "estado",
+      "in": [
+        "/geo/route",
+        "/gps/fix",
+        "/heading/fused"
+      ],
+      "out": [
+        "/local/route",
+        "/odom",
+        "/geo/position"
+      ],
+      "file": "odometry/gps.py",
+      "desc": "frontera geo/metrica: fija el datum, fix a /odom, ruta geo a x/y"
+    },
+    {
+      "id": "NavigationController",
+      "layer": 3,
+      "role": "control",
+      "in": [
+        "/nav/start",
+        "/local/route",
+        "/odom"
+      ],
+      "out": [
+        "/nav/cmd_vel",
+        "/nav/status"
+      ],
+      "file": "navigation/controller.py",
+      "desc": "sigue la ruta (stop_and_turn); frena si /odom no esta fresco"
+    },
+    {
+      "id": "NavigationInitializer",
+      "layer": 3,
+      "role": "control",
+      "in": [
+        "/nav/start",
+        "/odom"
+      ],
+      "out": [
+        "/init/cmd_vel",
+        "/imu/calibrate"
+      ],
+      "file": "navigation/initializer.py",
+      "desc": "en cada GO recalibra el gyro y avanza recto hasta converger"
+    },
+    {
+      "id": "JoystickController",
+      "layer": 3,
+      "role": "control",
+      "in": [
+        "joystick"
+      ],
+      "out": [
+        "/joy/cmd_vel"
+      ],
+      "file": "navigation/joystick.py",
+      "desc": "teleop crudo, con prioridad sobre nav"
+    },
+    {
+      "id": "MotorGateway",
+      "layer": 4,
+      "role": "control",
+      "in": [
+        "/nav/cmd_vel",
+        "/init/cmd_vel",
+        "/joy/cmd_vel"
+      ],
+      "out": [
+        "velL",
+        "velR"
+      ],
+      "file": "motor/gateway.py",
+      "desc": "mux de prioridad joy>init>nav, rampa por fuente y cinematica"
+    },
+    {
+      "id": "Pico / motores",
+      "layer": 5,
+      "role": "hw",
+      "in": [
+        "velL",
+        "velR"
+      ],
+      "out": [],
+      "file": "hardware",
+      "desc": "recibe las velocidades de rueda por MQTT"
+    },
+    {
+      "id": "TelemetryBridge",
+      "layer": 6,
+      "role": "comando",
+      "in": [
+        "/nav/status",
+        "/geo/position",
+        "/gps/status",
+        "/imu/status",
+        "/imu/yaw"
+      ],
+      "out": [
+        "MQTT"
+      ],
+      "file": "adapters/mqtt/telemetry_bridge.py",
+      "desc": "espeja el estado del stack a la web, throttleado a telemetry_hz"
+    },
+    {
+      "id": "LogBridge",
+      "layer": 6,
+      "role": "comando",
+      "in": [
+        "/rosout"
+      ],
+      "out": [
+        "MQTT"
+      ],
+      "file": "adapters/mqtt/log_bridge.py",
+      "desc": "reenvia los logs de ROS (>= INFO) al broker"
+    }
+  ],
+  "edges": [
+    [
+      "GpsNmea",
+      "/gps/course",
+      "FusionHeading",
+      "/gps/course"
+    ],
+    [
+      "ImuMpu6050",
+      "/imu/yaw",
+      "FusionHeading",
+      "/imu/yaw"
+    ],
+    [
+      "ImuMpu6050",
+      "/imu/rate",
+      "FusionHeading",
+      "/imu/rate"
+    ],
+    [
+      "GpsNmea",
+      "/gps/fix",
+      "OdometryGps",
+      "/gps/fix"
+    ],
+    [
+      "CommandBridge",
+      "/geo/route",
+      "OdometryGps",
+      "/geo/route"
+    ],
+    [
+      "FusionHeading",
+      "/heading/fused",
+      "OdometryGps",
+      "/heading/fused"
+    ],
+    [
+      "CommandBridge",
+      "/nav/start",
+      "NavigationController",
+      "/nav/start"
+    ],
+    [
+      "CommandBridge",
+      "/nav/start",
+      "NavigationInitializer",
+      "/nav/start"
+    ],
+    [
+      "OdometryGps",
+      "/local/route",
+      "NavigationController",
+      "/local/route"
+    ],
+    [
+      "OdometryGps",
+      "/odom",
+      "NavigationController",
+      "/odom"
+    ],
+    [
+      "OdometryGps",
+      "/odom",
+      "NavigationInitializer",
+      "/odom"
+    ],
+    [
+      "NavigationController",
+      "/nav/cmd_vel",
+      "MotorGateway",
+      "/nav/cmd_vel"
+    ],
+    [
+      "NavigationInitializer",
+      "/init/cmd_vel",
+      "MotorGateway",
+      "/init/cmd_vel"
+    ],
+    [
+      "JoystickController",
+      "/joy/cmd_vel",
+      "MotorGateway",
+      "/joy/cmd_vel"
+    ],
+    [
+      "MotorGateway",
+      "velL",
+      "Pico / motores",
+      "velL"
+    ],
+    [
+      "MotorGateway",
+      "velR",
+      "Pico / motores",
+      "velR"
+    ],
+    [
+      "NavigationInitializer",
+      "/imu/calibrate",
+      "ImuMpu6050",
+      "/imu/calibrate",
+      "feedback"
+    ],
+    [
+      "GpsNmea",
+      "/gps/status",
+      "TelemetryBridge",
+      "/gps/status"
+    ],
+    [
+      "ImuMpu6050",
+      "/imu/status",
+      "TelemetryBridge",
+      "/imu/status"
+    ],
+    [
+      "ImuMpu6050",
+      "/imu/yaw",
+      "TelemetryBridge",
+      "/imu/yaw"
+    ],
+    [
+      "OdometryGps",
+      "/geo/position",
+      "TelemetryBridge",
+      "/geo/position"
+    ],
+    [
+      "NavigationController",
+      "/nav/status",
+      "TelemetryBridge",
+      "/nav/status"
+    ]
+  ]
+}

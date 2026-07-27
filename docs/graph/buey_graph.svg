@@ -1,0 +1,233 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1633" height="1238" viewBox="0 0 1633 1238" font-family="system-ui,-apple-system,Segoe UI,sans-serif">
+<rect width="1633" height="1238" fill="#141416"/>
+<path data-edge="GpsNmea:/gps/course -&gt; FusionHeading" d="M914.5,164 L914.5,189.0 Q914.5,196 921.5,196.0 L1191.3,196.0 Q1198.3,196 1198.3,203.0 L1198.3,242" fill="none" stroke="#5AC8A8" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M1194.3,236 L1198.3,242 L1202.3,236" fill="none" stroke="#5AC8A8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="ImuMpu6050:/imu/yaw -&gt; FusionHeading" d="M1280.8,164 L1280.8,242" fill="none" stroke="#5AC8A8" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M1276.8,236 L1280.8,242 L1284.8,236" fill="none" stroke="#5AC8A8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="ImuMpu6050:/imu/rate -&gt; FusionHeading" d="M1357,164 L1357,242" fill="none" stroke="#5AC8A8" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M1353,236 L1357,242 L1361,236" fill="none" stroke="#5AC8A8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="GpsNmea:/gps/fix -&gt; OdometryGps" d="M832.1,164 L832.1,418" fill="none" stroke="#5AC8A8" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M828.1,412 L832.1,418 L836.1,412" fill="none" stroke="#5AC8A8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="CommandBridge:/geo/route -&gt; OdometryGps" d="M450.8,164 L450.8,353.0 Q450.8,360 457.8,360.0 L745.8,360.0 Q752.8,360 752.8,367.0 L752.8,418" fill="none" stroke="#D9A85C" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M748.8,412 L752.8,418 L756.8,412" fill="none" stroke="#D9A85C" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="FusionHeading:/heading/fused -&gt; OdometryGps" d="M1207.6,340 L1207.6,353.0 Q1207.6,360 1200.6,360.0 L930.8,360.0 Q923.8,360 923.8,367.0 L923.8,418" fill="none" stroke="#9B93E8" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M919.8,412 L923.8,418 L927.8,412" fill="none" stroke="#9B93E8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="CommandBridge:/nav/start -&gt; NavigationController" d="M365.3,164 L365.3,541.0 Q365.3,548 372.3,548.0 L660.3,548.0 Q667.3,548 667.3,555.0 L667.3,594" fill="none" stroke="#D9A85C" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M663.3,588 L667.3,594 L671.3,588" fill="none" stroke="#D9A85C" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="CommandBridge:/nav/start -&gt; NavigationInitializer" d="M365.3,164 L365.3,594" fill="none" stroke="#D9A85C" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M361.3,588 L365.3,594 L369.3,588" fill="none" stroke="#D9A85C" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="OdometryGps:/local/route -&gt; NavigationController" d="M758.9,516 L758.9,594" fill="none" stroke="#9B93E8" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M754.9,588 L758.9,594 L762.9,588" fill="none" stroke="#9B93E8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="OdometryGps:/odom -&gt; NavigationController" d="M835.2,516 L835.2,594" fill="none" stroke="#9B93E8" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M831.2,588 L835.2,594 L839.2,588" fill="none" stroke="#9B93E8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="OdometryGps:/odom -&gt; NavigationInitializer" d="M835.2,516 L835.2,529.0 Q835.2,536 828.2,536.0 L442.4,536.0 Q435.4,536 435.4,543.0 L435.4,594" fill="none" stroke="#9B93E8" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M431.4,588 L435.4,594 L439.4,588" fill="none" stroke="#9B93E8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="NavigationController:/nav/cmd_vel -&gt; MotorGateway" d="M673.4,692 L673.4,770" fill="none" stroke="#E08A6B" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M669.4,764 L673.4,770 L677.4,764" fill="none" stroke="#E08A6B" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="NavigationInitializer:/init/cmd_vel -&gt; MotorGateway" d="M374.5,692 L374.5,717.0 Q374.5,724 381.5,724.0 L767.3,724.0 Q774.3,724 774.3,731.0 L774.3,770" fill="none" stroke="#E08A6B" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M770.3,764 L774.3,770 L778.3,764" fill="none" stroke="#E08A6B" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="JoystickController:/joy/cmd_vel -&gt; MotorGateway" d="M999.4,692 L999.4,717.0 Q999.4,724 992.4,724.0 L882.2,724.0 Q875.2,724 875.2,731.0 L875.2,770" fill="none" stroke="#E08A6B" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M871.2,764 L875.2,770 L879.2,764" fill="none" stroke="#E08A6B" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="MotorGateway:velL -&gt; Pico / motores" d="M648.8,868 L648.8,946" fill="none" stroke="#E08A6B" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M644.8,940 L648.8,946 L652.8,940" fill="none" stroke="#E08A6B" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="MotorGateway:velR -&gt; Pico / motores" d="M697.4,868 L697.4,946" fill="none" stroke="#E08A6B" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M693.4,940 L697.4,946 L701.4,940" fill="none" stroke="#E08A6B" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="NavigationInitializer:/imu/calibrate -&gt; ImuMpu6050" d="M481,691 L481.0,710.0 Q481,717 488.0,717.0 L1523.7,717.0 Q1530.65,717 1530.7,710.0 L1530.7,28.0 Q1530.65,21 1523.7,21.0 L1391.2,21.0 Q1384.2,21 1384.2,28.0 L1384.2,67" fill="none" stroke="#E08A6B" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="5 4"/>
+<path d="M1380.2,61 L1384.2,67 L1388.2,61" fill="none" stroke="#E08A6B" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="GpsNmea:/gps/status -&gt; TelemetryBridge" d="M1006.2,164 L1006.2,177.0 Q1006.2,184 1013.2,184.0 L1089.0,184.0 Q1096,184 1096.0,191.0 L1096,1094" fill="none" stroke="#5AC8A8" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M1092,1088 L1096,1094 L1100,1088" fill="none" stroke="#5AC8A8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="ImuMpu6050:/imu/status -&gt; TelemetryBridge" d="M1442.5,164 L1442.5,1029.0 Q1442.5,1036 1435.5,1036.0 L1194.7,1036.0 Q1187.7,1036 1187.7,1043.0 L1187.7,1094" fill="none" stroke="#5AC8A8" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M1183.7,1088 L1187.7,1094 L1191.7,1088" fill="none" stroke="#5AC8A8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="ImuMpu6050:/imu/yaw -&gt; TelemetryBridge" d="M1280.8,164 L1280.8,177.0 Q1280.8,184 1287.8,184.0 L1418.0,184.0 Q1425,184 1425.0,191.0 L1425.0,1041.0 Q1425,1048 1418.0,1048.0 L1277.1,1048.0 Q1270.1,1048 1270.1,1055.0 L1270.1,1094" fill="none" stroke="#5AC8A8" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M1266.1,1088 L1270.1,1094 L1274.1,1088" fill="none" stroke="#5AC8A8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="OdometryGps:/geo/position -&gt; TelemetryBridge" d="M914.5,516 L914.5,529.0 Q914.5,536 921.5,536.0 L1076.0,536.0 Q1083,536 1083.0,543.0 L1083.0,1029.0 Q1083,1036 1076.0,1036.0 L1005.2,1036.0 Q998.2,1036 998.2,1043.0 L998.2,1094" fill="none" stroke="#9B93E8" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M994.2,1088 L998.2,1094 L1002.2,1088" fill="none" stroke="#9B93E8" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<path data-edge="NavigationController:/nav/status -&gt; TelemetryBridge" d="M768.1,692 L768.1,705.0 Q768.1,712 775.1,712.0 L946.0,712.0 Q953,712 953.0,719.0 L953.0,1029.0 Q953,1036 946.0,1036.0 L907.4,1036.0 Q900.4,1036 900.4,1043.0 L900.4,1094" fill="none" stroke="#E08A6B" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M896.4,1088 L900.4,1094 L904.4,1088" fill="none" stroke="#E08A6B" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+<g>
+<rect x="760" y="67" width="301" height="96" fill="#1F1F23" stroke="#32323A" stroke-width="1"/>
+<rect x="760" y="67" width="3" height="96" fill="#5AC8A8"/>
+<text x="790" y="89" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">in</text>
+<rect x="798" y="79" width="85.65" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="840.825" y="89" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="67.7" lengthAdjust="spacingAndGlyphs">serial NMEA</text>
+<text x="790" y="141" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">out</text>
+<rect x="798" y="131" width="67.2" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="831.6" y="141" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="49.2" lengthAdjust="spacingAndGlyphs">/gps/fix</text>
+<rect x="871.2" y="131" width="85.65" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="914.0250000000001" y="141" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="67.7" lengthAdjust="spacingAndGlyphs">/gps/course</text>
+<rect x="962.85" y="131" width="85.65" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="1005.6750000000001" y="141" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="67.7" lengthAdjust="spacingAndGlyphs">/gps/status</text>
+<text x="910.5" y="115" fill="#EFEFF3" font-size="12.5" font-weight="500" text-anchor="middle" dominant-baseline="central" textLength="48.3" lengthAdjust="spacingAndGlyphs">GpsNmea</text>
+</g>
+<g>
+<rect x="1208.65" y="67" width="288" height="96" fill="#1F1F23" stroke="#32323A" stroke-width="1"/>
+<rect x="1208.65" y="67" width="3" height="96" fill="#5AC8A8"/>
+<text x="1238.65" y="89" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">in</text>
+<rect x="1246.65" y="79" width="79.5" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="1286.4" y="89" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="61.5" lengthAdjust="spacingAndGlyphs">serial IMU</text>
+<rect x="1332.15" y="79" width="104.10000000000001" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="1384.2" y="89" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="86.1" lengthAdjust="spacingAndGlyphs">/imu/calibrate</text>
+<text x="1238.65" y="141" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">out</text>
+<rect x="1246.65" y="131" width="67.2" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="1280.25" y="141" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="49.2" lengthAdjust="spacingAndGlyphs">/imu/yaw</text>
+<rect x="1319.8500000000001" y="131" width="73.35" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="1356.525" y="141" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="55.4" lengthAdjust="spacingAndGlyphs">/imu/rate</text>
+<rect x="1399.2" y="131" width="85.65" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="1442.025" y="141" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="67.7" lengthAdjust="spacingAndGlyphs">/imu/status</text>
+<text x="1352.65" y="115" fill="#EFEFF3" font-size="12.5" font-weight="500" text-anchor="middle" dominant-baseline="central" textLength="69" lengthAdjust="spacingAndGlyphs">ImuMpu6050</text>
+</g>
+<g>
+<rect x="287" y="67" width="215" height="96" fill="#1F1F23" stroke="#32323A" stroke-width="1"/>
+<rect x="287" y="67" width="3" height="96" fill="#D9A85C"/>
+<text x="317" y="89" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">in</text>
+<rect x="325" y="79" width="42.6" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="346.3" y="89" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="24.6" lengthAdjust="spacingAndGlyphs">MQTT</text>
+<text x="317" y="141" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">out</text>
+<rect x="325" y="131" width="79.5" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="364.75" y="141" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="61.5" lengthAdjust="spacingAndGlyphs">/nav/start</text>
+<rect x="410.5" y="131" width="79.5" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="450.25" y="141" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="61.5" lengthAdjust="spacingAndGlyphs">/geo/route</text>
+<text x="394.5" y="115" fill="#EFEFF3" font-size="12.5" font-weight="500" text-anchor="middle" dominant-baseline="central" textLength="89.7" lengthAdjust="spacingAndGlyphs">CommandBridge</text>
+</g>
+<g>
+<rect x="1117" y="243" width="288" height="96" fill="#1F1F23" stroke="#32323A" stroke-width="1"/>
+<rect x="1117" y="243" width="3" height="96" fill="#9B93E8"/>
+<text x="1147" y="265" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">in</text>
+<rect x="1155" y="255" width="85.65" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="1197.825" y="265" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="67.7" lengthAdjust="spacingAndGlyphs">/gps/course</text>
+<rect x="1246.65" y="255" width="67.2" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="1280.25" y="265" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="49.2" lengthAdjust="spacingAndGlyphs">/imu/yaw</text>
+<rect x="1319.85" y="255" width="73.35" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="1356.5249999999999" y="265" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="55.4" lengthAdjust="spacingAndGlyphs">/imu/rate</text>
+<text x="1147" y="317" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">out</text>
+<rect x="1155" y="307" width="104.10000000000001" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="1207.05" y="317" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="86.1" lengthAdjust="spacingAndGlyphs">/heading/fused</text>
+<text x="1261" y="291" fill="#EFEFF3" font-size="12.5" font-weight="500" text-anchor="middle" dominant-baseline="central" textLength="89.7" lengthAdjust="spacingAndGlyphs">FusionHeading</text>
+</g>
+<g>
+<rect x="674.5" y="419" width="313" height="96" fill="#1F1F23" stroke="#32323A" stroke-width="1"/>
+<rect x="674.5" y="419" width="3" height="96" fill="#9B93E8"/>
+<text x="704.5" y="441" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">in</text>
+<rect x="712.5" y="431" width="79.5" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="752.25" y="441" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="61.5" lengthAdjust="spacingAndGlyphs">/geo/route</text>
+<rect x="798" y="431" width="67.2" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="831.6" y="441" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="49.2" lengthAdjust="spacingAndGlyphs">/gps/fix</text>
+<rect x="871.2" y="431" width="104.10000000000001" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="923.25" y="441" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="86.1" lengthAdjust="spacingAndGlyphs">/heading/fused</text>
+<text x="704.5" y="493" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">out</text>
+<rect x="712.5" y="483" width="91.80000000000001" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="758.4" y="493" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="73.8" lengthAdjust="spacingAndGlyphs">/local/route</text>
+<rect x="810.3" y="483" width="48.75" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="834.675" y="493" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="30.8" lengthAdjust="spacingAndGlyphs">/odom</text>
+<rect x="865.05" y="483" width="97.95" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="914.025" y="493" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="80" lengthAdjust="spacingAndGlyphs">/geo/position</text>
+<text x="831" y="467" fill="#EFEFF3" font-size="12.5" font-weight="500" text-anchor="middle" dominant-baseline="central" textLength="75.9" lengthAdjust="spacingAndGlyphs">OdometryGps</text>
+</g>
+<g>
+<rect x="589" y="595" width="282" height="96" fill="#1F1F23" stroke="#32323A" stroke-width="1"/>
+<rect x="589" y="595" width="3" height="96" fill="#E08A6B"/>
+<text x="619" y="617" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">in</text>
+<rect x="627" y="607" width="79.5" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="666.75" y="617" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="61.5" lengthAdjust="spacingAndGlyphs">/nav/start</text>
+<rect x="712.5" y="607" width="91.80000000000001" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="758.4" y="617" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="73.8" lengthAdjust="spacingAndGlyphs">/local/route</text>
+<rect x="810.3" y="607" width="48.75" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="834.675" y="617" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="30.8" lengthAdjust="spacingAndGlyphs">/odom</text>
+<text x="619" y="669" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">out</text>
+<rect x="627" y="659" width="91.80000000000001" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="672.9" y="669" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="73.8" lengthAdjust="spacingAndGlyphs">/nav/cmd_vel</text>
+<rect x="724.8" y="659" width="85.65" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="767.625" y="669" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="67.7" lengthAdjust="spacingAndGlyphs">/nav/status</text>
+<text x="730" y="643" fill="#EFEFF3" font-size="12.5" font-weight="500" text-anchor="middle" dominant-baseline="central" textLength="138" lengthAdjust="spacingAndGlyphs">NavigationController</text>
+</g>
+<g>
+<rect x="287" y="595" width="258" height="96" fill="#1F1F23" stroke="#32323A" stroke-width="1"/>
+<rect x="287" y="595" width="3" height="96" fill="#E08A6B"/>
+<text x="317" y="617" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">in</text>
+<rect x="325" y="607" width="79.5" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="364.75" y="617" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="61.5" lengthAdjust="spacingAndGlyphs">/nav/start</text>
+<rect x="410.5" y="607" width="48.75" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="434.875" y="617" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="30.8" lengthAdjust="spacingAndGlyphs">/odom</text>
+<text x="317" y="669" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">out</text>
+<rect x="325" y="659" width="97.95" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="373.975" y="669" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="80" lengthAdjust="spacingAndGlyphs">/init/cmd_vel</text>
+<rect x="428.95" y="659" width="104.10000000000001" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="481" y="669" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="86.1" lengthAdjust="spacingAndGlyphs">/imu/calibrate</text>
+<text x="416" y="643" fill="#EFEFF3" font-size="12.5" font-weight="500" text-anchor="middle" dominant-baseline="central" textLength="144.9" lengthAdjust="spacingAndGlyphs">NavigationInitializer</text>
+</g>
+<g>
+<rect x="915" y="595" width="148" height="96" fill="#1F1F23" stroke="#32323A" stroke-width="1"/>
+<rect x="915" y="595" width="3" height="96" fill="#E08A6B"/>
+<text x="945" y="617" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">in</text>
+<rect x="953" y="607" width="67.2" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="986.6" y="617" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="49.2" lengthAdjust="spacingAndGlyphs">joystick</text>
+<text x="945" y="669" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">out</text>
+<rect x="953" y="659" width="91.80000000000001" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="998.9" y="669" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="73.8" lengthAdjust="spacingAndGlyphs">/joy/cmd_vel</text>
+<text x="989" y="643" fill="#EFEFF3" font-size="12.5" font-weight="500" text-anchor="middle" dominant-baseline="central" textLength="124.2" lengthAdjust="spacingAndGlyphs">JoystickController</text>
+</g>
+<g>
+<rect x="589" y="771" width="344" height="96" fill="#1F1F23" stroke="#32323A" stroke-width="1"/>
+<rect x="589" y="771" width="3" height="96" fill="#E08A6B"/>
+<text x="619" y="793" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">in</text>
+<rect x="627" y="783" width="91.80000000000001" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="672.9" y="793" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="73.8" lengthAdjust="spacingAndGlyphs">/nav/cmd_vel</text>
+<rect x="724.8" y="783" width="97.95" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="773.775" y="793" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="80" lengthAdjust="spacingAndGlyphs">/init/cmd_vel</text>
+<rect x="828.75" y="783" width="91.80000000000001" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="874.65" y="793" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="73.8" lengthAdjust="spacingAndGlyphs">/joy/cmd_vel</text>
+<text x="619" y="845" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">out</text>
+<rect x="627" y="835" width="42.6" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="648.3" y="845" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="24.6" lengthAdjust="spacingAndGlyphs">velL</text>
+<rect x="675.6" y="835" width="42.6" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="696.9" y="845" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="24.6" lengthAdjust="spacingAndGlyphs">velR</text>
+<text x="761" y="819" fill="#EFEFF3" font-size="12.5" font-weight="500" text-anchor="middle" dominant-baseline="central" textLength="82.8" lengthAdjust="spacingAndGlyphs">MotorGateway</text>
+</g>
+<g>
+<rect x="589" y="947" width="141" height="69" fill="#1F1F23" stroke="#32323A" stroke-width="1"/>
+<rect x="589" y="947" width="3" height="69" fill="#8A8A94"/>
+<text x="619" y="969" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">in</text>
+<rect x="627" y="959" width="42.6" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="648.3" y="969" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="24.6" lengthAdjust="spacingAndGlyphs">velL</text>
+<rect x="675.6" y="959" width="42.6" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="696.9" y="969" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="24.6" lengthAdjust="spacingAndGlyphs">velR</text>
+<text x="659.5" y="995" fill="#EFEFF3" font-size="12.5" font-weight="500" text-anchor="middle" dominant-baseline="central" textLength="96.6" lengthAdjust="spacingAndGlyphs">Pico / motores</text>
+</g>
+<g>
+<rect x="819.075" y="1095" width="496" height="96" fill="#1F1F23" stroke="#32323A" stroke-width="1"/>
+<rect x="819.075" y="1095" width="3" height="96" fill="#D9A85C"/>
+<text x="849.075" y="1117" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">in</text>
+<rect x="857.075" y="1107" width="85.65" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="899.9000000000001" y="1117" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="67.7" lengthAdjust="spacingAndGlyphs">/nav/status</text>
+<rect x="948.725" y="1107" width="97.95" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="997.7" y="1117" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="80" lengthAdjust="spacingAndGlyphs">/geo/position</text>
+<rect x="1052.6750000000002" y="1107" width="85.65" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="1095.5000000000002" y="1117" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="67.7" lengthAdjust="spacingAndGlyphs">/gps/status</text>
+<rect x="1144.325" y="1107" width="85.65" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="1187.15" y="1117" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="67.7" lengthAdjust="spacingAndGlyphs">/imu/status</text>
+<rect x="1235.975" y="1107" width="67.2" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="1269.5749999999998" y="1117" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="49.2" lengthAdjust="spacingAndGlyphs">/imu/yaw</text>
+<text x="849.075" y="1169" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">out</text>
+<rect x="857.075" y="1159" width="42.6" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="878.375" y="1169" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="24.6" lengthAdjust="spacingAndGlyphs">MQTT</text>
+<text x="1067.075" y="1143" fill="#EFEFF3" font-size="12.5" font-weight="500" text-anchor="middle" dominant-baseline="central" textLength="103.5" lengthAdjust="spacingAndGlyphs">TelemetryBridge</text>
+</g>
+<g>
+<rect x="136" y="47" width="111" height="96" fill="#1F1F23" stroke="#32323A" stroke-width="1"/>
+<rect x="136" y="47" width="3" height="96" fill="#D9A85C"/>
+<text x="166" y="69" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">in</text>
+<rect x="174" y="59" width="61.050000000000004" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="204.525" y="69" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="43.1" lengthAdjust="spacingAndGlyphs">/rosout</text>
+<text x="166" y="121" fill="#7B7B87" font-size="11" text-anchor="end" dominant-baseline="central">out</text>
+<rect x="174" y="111" width="42.6" height="20" fill="#17171A" stroke="#45454F" stroke-width="0.8"/>
+<text x="195.3" y="121" fill="#C6C6CF" font-size="11" text-anchor="middle" dominant-baseline="central" textLength="24.6" lengthAdjust="spacingAndGlyphs">MQTT</text>
+<text x="191.5" y="95" fill="#EFEFF3" font-size="12.5" font-weight="500" text-anchor="middle" dominant-baseline="central" textLength="62.1" lengthAdjust="spacingAndGlyphs">LogBridge</text>
+</g>
+<text x="100" y="93" fill="#7B7B87" font-size="11.5" text-anchor="end">entradas</text>
+<text x="100" y="269" fill="#7B7B87" font-size="11.5" text-anchor="end">estimacion</text>
+<text x="100" y="445" fill="#7B7B87" font-size="11.5" text-anchor="end">odometria</text>
+<text x="100" y="621" fill="#7B7B87" font-size="11.5" text-anchor="end">navegacion</text>
+<text x="100" y="797" fill="#7B7B87" font-size="11.5" text-anchor="end">actuacion</text>
+<text x="100" y="973" fill="#7B7B87" font-size="11.5" text-anchor="end">hardware</text>
+<text x="100" y="73" fill="#7B7B87" font-size="11.5" text-anchor="end">telemetria</text>
+</svg>

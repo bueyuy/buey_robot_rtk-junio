@@ -1,0 +1,9 @@
+{
+  "name": "buey-graph",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node render.mjs graph.spec.json buey_graph.svg && node sync-docs.mjs"
+  },
+  "dependencies": { "elkjs": "^0.9.3" }
+}
